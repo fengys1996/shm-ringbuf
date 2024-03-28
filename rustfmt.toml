@@ -1,0 +1,4 @@
+group_imports = "StdExternalCrate"
+imports_granularity = "Item"
+max_width = 80
+comment_width = 80
