@@ -32,12 +32,16 @@ pub(crate) const VERSION: u32 = 1;
 pub struct Ringbuf<T> {
     /// The raw pointer to the data part.
     data_part_ptr: *mut u8,
+
     /// The length of the data part in ringbuf.
     data_part_len: usize,
+
     /// The offset of the next write, which will not be synchronized to the cunsumer side before committing data.
     current_write_offset: u32,
+
     /// The metadata of the ring buffer.
     metadata: RingbufMetadata,
+
     /// The underlying buffer that the ring buffer holds. We use arc to manage the lifecycle of the buffer.
     object: Arc<T>,
 }
