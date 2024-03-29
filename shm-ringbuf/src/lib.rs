@@ -1,1 +1,1 @@
-pub fn func() {}
+pub mod ringbuf;

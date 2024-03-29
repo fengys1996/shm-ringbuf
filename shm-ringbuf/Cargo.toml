@@ -5,3 +5,5 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+memmap2 = { workspace = true }
+snafu = { workspace = true }
