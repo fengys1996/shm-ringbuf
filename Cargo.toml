@@ -12,20 +12,3 @@ edition = "2021"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-async-trait = { version = "0.1" }
-crc32fast = { version = "1.3" }
-dashmap = { version = "5.5" }
-memfd = { version = "0.6" }
-memmap2 = { version = "0.9" }
-passfd = { git = "https://github.com/polachok/passfd.git", rev = "d55881752c16aced1a49a75f9c428d38d3767213", features = ["async"] }
-prost = { version = "0.12" }
-shm-common = { path = "./shm-common" }
-snafu = { version = "0.8" }
-tokio = { version = "1.36", features = ["full"] }
-tokio-send-fd = { version = "0.9" }
-tokio-stream = { version = "0.1" }
-tokio-util = { version = "0.7" }
-tonic = { version = "0.11" }
-tower = { version = "0.4" }
-tracing = { version = "0.1" }
-uuid = { version = "1.7", features = ["v4"] }
