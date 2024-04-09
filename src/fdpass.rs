@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::fs::File;
 use std::os::fd::AsRawFd;
 use std::os::fd::FromRawFd;
@@ -38,26 +37,15 @@ impl<F> FdRecvServer<F>
 where
     F: std::future::Future<Output = ()>,
 {
-    pub fn new(
-        sock_path: impl Into<PathBuf>,
-        ring_set: ShareRingbufSet,
-    ) -> Self {
-        FdRecvServer {
-            sock_path: sock_path.into(),
-            ring_set,
-            shutdown: None,
-        }
-    }
-
     pub fn with_shutdown(
         sock_path: impl Into<PathBuf>,
         ring_set: ShareRingbufSet,
-        shutdown: F,
+        shutdown: Option<F>,
     ) -> Self {
         FdRecvServer {
             sock_path: sock_path.into(),
             ring_set,
-            shutdown: Some(shutdown),
+            shutdown,
         }
     }
 
@@ -72,7 +60,7 @@ where
                 tokio::select! {
                     ret = self.run_once(&listener) => ret?,
                     _ = &mut pin_shutdown => {
-                        info!("shutdown signal received, exit the recvfd server.");
+                        info!("receive cancel signal, exit the recvfd server.");
                         return Ok(());
                     }
                 }
@@ -127,7 +115,7 @@ impl Handler {
         let file = unsafe { File::from_raw_fd(fd) };
 
         // 4. create the ringbuf.
-        let ringbuf = Ringbuf::from_raw(file, len_of_ringbuf as usize)?;
+        let ringbuf = Ringbuf::from_raw(&file, len_of_ringbuf as usize)?;
 
         // 5. store the ringbuf to ring_set.
         self.ring_set.insert(id, ringbuf);

@@ -1,10 +1,9 @@
+pub mod metadata;
+
 use std::ffi::c_void;
 use std::fs;
-use std::mem::align_of;
 use std::num::NonZeroUsize;
 use std::ptr::NonNull;
-use std::sync::atomic::AtomicU32;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::usize;
 
@@ -17,6 +16,7 @@ use snafu::ResultExt;
 use tracing::error;
 use tracing::info;
 
+use self::metadata::RingbufMetadata;
 use crate::data_block::DataBlock;
 use crate::data_block::HEADER_LEN;
 use crate::error;
@@ -64,42 +64,13 @@ pub struct Ringbuf {
 unsafe impl Send for Ringbuf {}
 unsafe impl Sync for Ringbuf {}
 
-/// The metadata of ring buffer.
-///
-/// ## The underlying structure
-///
-/// ```text
-///      metadata.produce_offset     metadata.consume_offset
-///                     |                   |
-///                     v                   v
-/// +-------------------+-------------------+-------------------+-------------------+
-/// | version           | produce_offset    | consume_offset    | reserved          |
-/// +-------------------+-------------------+-------------------+-------------------+
-/// | 4 bytes           | 4 bytes           | 4 bytes           | n bytes           |
-/// +-------------------+-------------------+-------------------+-------------------+
-/// ```
-#[derive(Debug)]
-pub(crate) struct RingbufMetadata {
-    /// The version of the ring buffer.
-    version_ptr: *mut u32,
-
-    /// The raw pointer to produce_offset which is the next write position in ringbuf.
-    produce_offset_ptr: *mut u32,
-
-    /// The raw pointer to consume_offset which is the next read position in ringbuf.
-    consume_offset_ptr: *mut u32,
-}
-
-pub type PreAlloc = DataBlock<DropGuard>;
-
 impl Ringbuf {
     /// Create a new ring buffer from the file, and reset the metadata.
-    pub fn new(file: fs::File, data_size: usize) -> Result<Self> {
+    pub fn new(file: &fs::File, data_size: usize) -> Result<Self> {
         let ringbuf = Self::from_raw(file, data_size)?;
 
-        ringbuf.atomic_set_version(VERSION);
-        ringbuf.atomic_set_consume_offset(0);
-        ringbuf.atomic_set_produce_offset(0);
+        ringbuf.metadata.atomic_set_consume_offset(0);
+        ringbuf.metadata.atomic_set_produce_offset(0);
 
         Ok(ringbuf)
     }
@@ -111,7 +82,7 @@ impl Ringbuf {
     /// 1. The length paramter is not the actual length of the data part.
     /// This length parameter will be referenced when creating ringbuf.
     /// 2. create a ringbuf, but not reset the metadata.
-    pub fn from_raw(file: fs::File, length: usize) -> Result<Self> {
+    pub fn from_raw(file: &fs::File, length: usize) -> Result<Self> {
         ensure!(
             length > 0,
             error::InvalidParameterSnafu {
@@ -152,7 +123,7 @@ impl Ringbuf {
                 mmap_len,
                 rw_prot,
                 public_flags,
-                &file,
+                file,
                 0,
             )
             .context(error::MmapSnafu)?
@@ -170,7 +141,7 @@ impl Ringbuf {
                 mmap_len,
                 rw_prot,
                 public_flags,
-                &file,
+                file,
                 offset,
             )
             .context(error::MmapSnafu)?
@@ -179,15 +150,8 @@ impl Ringbuf {
         let data_part_ptr =
             unsafe { anchor_ptr.add(align_metadata_size).as_ptr() as *mut u8 };
         let data_part_len = align_data_size;
-        let metadata = RingbufMetadata {
-            version_ptr: metadata_ptr.as_ptr() as *mut u32,
-            produce_offset_ptr: unsafe {
-                metadata_ptr.add(4).as_ptr() as *mut u32
-            },
-            consume_offset_ptr: unsafe {
-                metadata_ptr.add(8).as_ptr() as *mut u32
-            },
-        };
+        let metadata =
+            unsafe { RingbufMetadata::new(metadata_ptr.as_ptr() as *mut u8) };
 
         let drop_guard = Arc::new(DropGuard {
             mmap_ptr: anchor_ptr,
@@ -204,10 +168,8 @@ impl Ringbuf {
         Ok(ringbuf)
     }
 
-    pub fn reserve(&mut self, bytes: usize) -> Result<PreAlloc> {
-        // let bytes = (bytes / 4 + 1) * 4;
-        let bytes = (bytes + 3) & !3;
-
+    pub fn reserve(&mut self, bytes: usize) -> Result<DataBlock<DropGuard>> {
+        let bytes = (bytes + 3) / 4 * 4;
         let actual_alloc_bytes = (bytes + HEADER_LEN) as u32;
 
         ensure!(
@@ -227,7 +189,9 @@ impl Ringbuf {
             DataBlock::new(start_ptr, actual_alloc_bytes, drop_guard)?
         };
 
-        self.advance_produce_offset(actual_alloc_bytes);
+        unsafe {
+            self.advance_produce_offset(actual_alloc_bytes);
+        }
 
         Ok(data_block)
     }
@@ -249,93 +213,72 @@ impl Ringbuf {
         Some(data_block)
     }
 
-    pub fn advance_produce_offset(&mut self, len: u32) {
-        let produce_offset = self.produce_offset();
+    /// Advance the produce offset with no boundary detection.
+    ///
+    /// # Safety
+    /// This function is unsafe because it does not check the boundary of the ring buffer.
+    pub unsafe fn advance_produce_offset(&mut self, len: u32) {
+        let pre_produce_offset = self.produce_offset();
 
-        // The following code is equivalent to the above code.
-        // let produce_offset = (produce_offset + len) % self.data_part_len as u32;
-        let mask = self.data_part_len as u32 - 1;
-        let produce_offset = (produce_offset + len) & mask;
+        let produce_offset =
+            (pre_produce_offset + len) % self.data_part_len as u32;
 
         self.atomic_set_produce_offset(produce_offset);
     }
 
-    pub fn advance_consume_offset(&mut self, len: u32) {
-        let consume_offset = self.consume_offset();
+    /// Advance the consume offset with no boundary detection.
+    ///
+    /// # Safety
+    /// This function is unsafe because it does not check the boundary of the ring buffer.
+    pub unsafe fn advance_consume_offset(&mut self, len: u32) {
+        let pre_consume_offset = self.consume_offset();
 
-        // The following code is equivalent to the above code.
-        // let consume_offset = (consume_offset + len) % self.data_part_len as u32;
-        let mask = self.data_part_len as u32 - 1;
-        let consume_offset = (consume_offset + len) & mask;
+        let consume_offset =
+            (pre_consume_offset + len) % self.data_part_len as u32;
 
         self.atomic_set_consume_offset(consume_offset);
     }
 
-    fn remain_bytes(&self) -> u32 {
+    pub fn remain_bytes(&self) -> u32 {
+        self.capacity() - self.written_bytes()
+    }
+
+    pub fn capacity(&self) -> u32 {
+        self.data_part_len as u32 - 1
+    }
+
+    pub fn written_bytes(&self) -> u32 {
         let produce_offset = self.produce_offset();
         let consumer_offset = self.atomic_consume_offset();
         if produce_offset >= consumer_offset {
-            self.data_part_len as u32 - (produce_offset - consumer_offset) - 1
+            produce_offset - consumer_offset
         } else {
-            consumer_offset - produce_offset - 1
+            self.data_part_len as u32 - (consumer_offset - produce_offset)
         }
     }
 
-    #[allow(dead_code)]
-    pub fn atomic_version(&self) -> u32 {
-        let ptr = self.metadata.version_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.load(Ordering::Relaxed)
+    pub fn consume_offset(&self) -> u32 {
+        self.metadata.consume_offset()
     }
 
-    fn atomic_set_version(&self, version: u32) {
-        let ptr = self.metadata.version_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.store(version, Ordering::Relaxed);
+    pub fn atomic_consume_offset(&self) -> u32 {
+        self.metadata.atomic_consume_offset()
     }
 
-    fn consume_offset(&self) -> u32 {
-        unsafe { *self.metadata.consume_offset_ptr }
+    fn atomic_set_consume_offset(&self, offset: u32) {
+        self.metadata.atomic_set_consume_offset(offset)
     }
 
-    fn atomic_consume_offset(&self) -> u32 {
-        let ptr = self.metadata.consume_offset_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.load(Ordering::Relaxed)
+    pub fn produce_offset(&self) -> u32 {
+        self.metadata.produce_offset()
     }
 
-    pub fn atomic_set_consume_offset(&self, offset: u32) {
-        let ptr = self.metadata.consume_offset_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.store(offset, Ordering::Relaxed);
-    }
-
-    fn produce_offset(&self) -> u32 {
-        unsafe { *self.metadata.produce_offset_ptr }
-    }
-
-    fn atomic_produce_offset(&self) -> u32 {
-        let ptr = self.metadata.produce_offset_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.load(Ordering::Relaxed)
+    pub fn atomic_produce_offset(&self) -> u32 {
+        self.metadata.atomic_produce_offset()
     }
 
     fn atomic_set_produce_offset(&self, offset: u32) {
-        let ptr = self.metadata.produce_offset_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.store(offset, Ordering::Relaxed);
+        self.metadata.atomic_set_produce_offset(offset)
     }
 }
 
@@ -368,6 +311,77 @@ fn sys_page_size() -> usize {
     unsafe { nix::libc::sysconf(_SC_PAGESIZE) as usize }
 }
 
-// TODO: add some unit tests.
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use crate::ringbuf::page_align_size;
+    use crate::ringbuf::{self};
+
+    #[test]
+    fn test_ringbuf_metadata() {
+        let file = tempfile::tempfile().unwrap();
+        file.set_len(1024).unwrap();
+
+        let mut ringbuf_producer = ringbuf::Ringbuf::new(&file, 1024).unwrap();
+        ringbuf_producer.atomic_set_consume_offset(4);
+        ringbuf_producer.atomic_set_produce_offset(8);
+
+        unsafe {
+            ringbuf_producer.advance_produce_offset(4);
+        }
+
+        let mut ringbuf_consumer =
+            ringbuf::Ringbuf::from_raw(&file, 1024).unwrap();
+        assert_eq!(ringbuf_consumer.atomic_consume_offset(), 4);
+        assert_eq!(ringbuf_consumer.atomic_produce_offset(), 12);
+
+        unsafe {
+            ringbuf_consumer.advance_consume_offset(4);
+        }
+
+        assert_eq!(ringbuf_consumer.atomic_produce_offset(), 12);
+        assert_eq!(ringbuf_producer.atomic_produce_offset(), 12);
+    }
+
+    #[test]
+    fn test_ringbuf_remain_bytes() {
+        let file = tempfile::tempfile().unwrap();
+        file.set_len(1024).unwrap();
+
+        let mut ringbuf_producer = ringbuf::Ringbuf::new(&file, 1024).unwrap();
+        let actual_alloc_bytes = page_align_size(1024) as u32;
+
+        ringbuf_producer.atomic_set_consume_offset(4);
+        ringbuf_producer.atomic_set_produce_offset(8);
+
+        assert_eq!(ringbuf_producer.remain_bytes(), actual_alloc_bytes - 4 - 1);
+        unsafe {
+            ringbuf_producer.advance_produce_offset(4);
+        }
+        assert_eq!(ringbuf_producer.remain_bytes(), actual_alloc_bytes - 8 - 1);
+
+        ringbuf_producer.atomic_set_consume_offset(8);
+        ringbuf_producer.atomic_set_produce_offset(4);
+        assert_eq!(ringbuf_producer.remain_bytes(), 3);
+    }
+
+    #[test]
+    fn test_ringbuf_advance() {
+        let file = tempfile::tempfile().unwrap();
+        file.set_len(1024).unwrap();
+
+        let mut ringbuf_producer = ringbuf::Ringbuf::new(&file, 1024).unwrap();
+        let actual_alloc_bytes = page_align_size(1024) as u32;
+
+        ringbuf_producer.atomic_set_consume_offset(actual_alloc_bytes - 8);
+        unsafe {
+            ringbuf_producer.advance_consume_offset(9);
+        }
+        assert_eq!(ringbuf_producer.consume_offset(), 1);
+
+        ringbuf_producer.atomic_set_produce_offset(actual_alloc_bytes);
+        unsafe {
+            ringbuf_producer.advance_produce_offset(9);
+        }
+        assert_eq!(ringbuf_producer.produce_offset(), 9);
+    }
+}

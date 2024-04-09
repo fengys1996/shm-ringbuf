@@ -1,10 +1,11 @@
-use std::mem::align_of;
-use std::sync::atomic::AtomicU32;
-use std::sync::atomic::Ordering;
+pub mod header;
+
+use std::ptr;
 use std::sync::Arc;
 
 use snafu::ensure;
 
+use self::header::Header;
 use crate::error;
 use crate::error::Result;
 
@@ -22,6 +23,7 @@ use crate::error::Result;
 /// | 16 bytes          | *header.capacity_ptr bytes                    |
 /// +-------------------+-----------------------------------------------+
 /// ```
+
 pub struct DataBlock<T> {
     data_ptr: *mut u8,
     header: Header,
@@ -32,32 +34,6 @@ pub const HEADER_LEN: usize = 4 * 4;
 
 unsafe impl<T> Send for DataBlock<T> {}
 unsafe impl<T> Sync for DataBlock<T> {}
-
-/// The header of the DataBlock.
-///
-/// ## The underlying structure
-///
-/// ```text
-/// header.capacity_ptr header.len_ptr      header.busy_ptr
-/// |                   |                   |
-/// v                   v                   v
-/// +-------------------+-------------------+-------------------+-------------------+
-/// | capacity          | len               | busy              | padding           |
-/// +-------------------+-------------------+-------------------+-------------------+
-/// | 4 bytes           | 4 bytes           | 4 bytes           | 4 bytes           |
-/// +-------------------+-------------------+-------------------+-------------------+
-pub(crate) struct Header {
-    /// The pointer to the capacity of the DataBlock.
-    pub(crate) capacity_ptr: *mut u32,
-
-    /// The pointer to the length of the DataBlock.
-    pub(crate) len_ptr: *mut u32,
-
-    /// The pointer to the busy flag of the DataBlock.
-    /// If busy is 1, it means that the producer may be writing and the consumer cannot consume the Datablock.
-    /// Else it means that the consumer can reading the DataBlock.
-    pub(crate) busy_ptr: *mut u32,
-}
 
 impl<T> DataBlock<T> {
     /// Get the slice of the DataBlock.
@@ -86,11 +62,7 @@ impl<T> DataBlock<T> {
         let write_position = unsafe { self.data_ptr.add(self.len() as usize) };
 
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                data.as_ptr(),
-                write_position,
-                data.len(),
-            );
+            ptr::copy_nonoverlapping(data.as_ptr(), write_position, data.len());
         }
 
         self.advance_len(data_len);
@@ -98,7 +70,7 @@ impl<T> DataBlock<T> {
         Ok(())
     }
 
-    pub async fn commit(self) {
+    pub fn commit(&self) {
         self.set_busy(false);
     }
 }
@@ -124,7 +96,15 @@ impl<T> DataBlock<T> {
             }
         );
 
-        let data_block = DataBlock::from_raw(start_ptr, object);
+        let header = Header::new(start_ptr);
+
+        let data_ptr = unsafe { start_ptr.add(HEADER_LEN) };
+
+        let data_block = DataBlock {
+            data_ptr,
+            header,
+            _object: object,
+        };
 
         data_block.set_capacity(total_length - HEADER_LEN as u32);
         data_block.set_len(0);
@@ -140,11 +120,7 @@ impl<T> DataBlock<T> {
     /// The caller must ensure that the `start_ptr` is a valid pointer. And the data pointed to by the pointer
     /// is correct.
     pub(crate) unsafe fn from_raw(start_ptr: *mut u8, object: Arc<T>) -> Self {
-        let header = Header {
-            capacity_ptr: start_ptr as *mut u32,
-            len_ptr: unsafe { start_ptr.add(4) as *mut u32 },
-            busy_ptr: unsafe { start_ptr.add(8) as *mut u32 },
-        };
+        let header = Header::new(start_ptr);
 
         let data_ptr = unsafe { start_ptr.add(HEADER_LEN) };
 
@@ -159,50 +135,28 @@ impl<T> DataBlock<T> {
         self.capacity() + HEADER_LEN as u32
     }
 
-    pub(crate) fn capacity(&self) -> u32 {
-        unsafe { *self.header.capacity_ptr }
+    fn capacity(&self) -> u32 {
+        self.header.capacity()
     }
 
-    pub(crate) fn len(&self) -> u32 {
-        unsafe { *self.header.len_ptr }
+    fn len(&self) -> u32 {
+        self.header.len()
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn is_busy(&self) -> bool {
-        unsafe { *self.header.busy_ptr == 1 }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn atomic_capacity(&self) -> u32 {
-        let ptr = self.header.capacity_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn atomic_len(&self) -> u32 {
-        let ptr = self.header.len_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.load(Ordering::Relaxed)
+    fn atomic_len(&self) -> u32 {
+        self.header.atomic_len()
     }
 
     pub(crate) fn atomic_is_busy(&self) -> bool {
-        let ptr = self.header.busy_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.load(Ordering::Relaxed) == 1
+        self.header.atomic_busy() == 1
     }
 
-    pub(crate) fn set_busy(&self, busy: bool) {
-        let ptr = self.header.busy_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.store(busy as u32, Ordering::Relaxed);
+    fn set_busy(&self, busy: bool) {
+        if busy {
+            self.header.atomic_set_busy(1);
+        } else {
+            self.header.atomic_set_busy(0);
+        }
     }
 
     /// Set the capacity of the DataBlock.
@@ -210,27 +164,15 @@ impl<T> DataBlock<T> {
     /// ## Note
     /// Capacity can only be set when creating datablock.
     fn set_capacity(&self, capacity: u32) {
-        let ptr = self.header.capacity_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.store(capacity, Ordering::Relaxed);
+        self.header.atomic_set_capacity(capacity);
     }
 
-    pub(crate) fn set_len(&self, len: u32) {
-        let ptr = self.header.len_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.store(len, Ordering::Relaxed);
+    fn set_len(&self, len: u32) {
+        self.header.atomic_set_len(len);
     }
 
     pub(crate) fn advance_len(&self, len: u32) {
-        let ptr = self.header.len_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
-
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.fetch_add(len, Ordering::Relaxed);
+        self.header.advance_len(len)
     }
 }
 
@@ -272,9 +214,9 @@ mod tests {
 
         assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
         assert_eq!(data_block.len(), 0);
-        assert!(data_block.is_busy());
+        assert!(data_block.atomic_is_busy());
 
-        assert_eq!(data_block.atomic_capacity(), 1024 - HEADER_LEN as u32);
+        assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
         assert_eq!(data_block.atomic_len(), 0);
         assert!(data_block.atomic_is_busy());
 
@@ -282,9 +224,9 @@ mod tests {
 
         assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
         assert_eq!(data_block.len(), 0);
-        assert!(data_block.is_busy());
+        assert!(data_block.atomic_is_busy());
 
-        assert_eq!(data_block.atomic_capacity(), 1024 - HEADER_LEN as u32);
+        assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
         assert_eq!(data_block.atomic_len(), 0);
         assert!(data_block.atomic_is_busy());
 
@@ -292,7 +234,7 @@ mod tests {
         assert_eq!(data_block.len(), 10);
 
         data_block.set_busy(false);
-        assert!(!data_block.is_busy());
+        assert!(!data_block.atomic_is_busy());
     }
 
     #[test]

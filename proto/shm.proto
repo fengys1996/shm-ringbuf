@@ -40,7 +40,13 @@ message PingRequest {
   string producer_id = 1;
 }
 
-message PingResponse {}
+message PingResponse {
+  /// The status code of the ping.
+  uint32 status_code = 1;
+  
+  /// The status message of the ping.
+  string status_message = 2;
+}
 
 message NotifyRequest {
   /// The producer_id uniquely identifies the client.

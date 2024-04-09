@@ -27,24 +27,12 @@ fn do_memfd_create(settings: MmapSettings) -> Result<fs::File> {
 
     let MmapSettings { name, size } = settings;
 
-    let opts = memfd::MemfdOptions::default().allow_sealing(true);
+    let opts = memfd::MemfdOptions::default().allow_sealing(false);
     let mfd = opts.create(name).context(error::MemFdSnafu {
         operate_name: "create",
     })?;
 
     mfd.as_file().set_len(size).context(error::IoSnafu)?;
-
-    let mut seals = memfd::SealsHashSet::new();
-    seals.insert(memfd::FileSeal::SealShrink);
-    seals.insert(memfd::FileSeal::SealGrow);
-    mfd.add_seals(&seals).context(error::MemFdSnafu {
-        operate_name: "add_seals",
-    })?;
-
-    mfd.add_seal(memfd::FileSeal::SealSeal)
-        .context(error::MemFdSnafu {
-            operate_name: "add_seals",
-        })?;
 
     Ok(mfd.into_file())
 }
