@@ -32,14 +32,18 @@ async fn main() {
 
         pre_alloc.write(write_str.as_bytes()).unwrap();
 
-        pre_alloc.commit_and_notify(100).await;
+        pre_alloc.commit();
+
+        if i % 100 == 0 {
+            sleep(Duration::from_millis(10)).await;
+        }
     }
 }
 
 fn producer_settings() -> ProducerSettings {
     let control_sock_path = PathBuf::from_str("/tmp/ctl.sock").unwrap();
     let sendfd_sock_path = PathBuf::from_str("/tmp/fd.sock").unwrap();
-    let size_of_ringbuf = 1024 * 20;
+    let size_of_ringbuf = 1024 * 32;
     let heartbeat_interval_second = 1;
 
     ProducerSettings {

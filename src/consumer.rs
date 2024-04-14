@@ -1,10 +1,10 @@
 pub mod decode;
+pub(crate) mod rings_store;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use dashmap::DashMap;
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
@@ -15,27 +15,30 @@ use tracing::warn;
 
 use self::decode::Context;
 use self::decode::Decode;
+use self::rings_store::ExpireDashMap;
 use crate::error::Result;
 use crate::fdpass::FdRecvServer;
 use crate::grpc::ShmCtlServer;
 use crate::ringbuf::Ringbuf;
 
 pub struct RingbufConsumer<D, Item> {
-    rings: ShareRingbufSet,
+    ringbuf_store: RingbufStore,
     sender: Sender<Item>,
     decoder: D,
     notify: Arc<Notify>,
     cancel: CancellationToken,
 }
 
+pub type RingbufStore = ExpireDashMap<Ringbuf>;
+
 pub struct ConsumerSettings {
     pub control_sock_path: PathBuf,
     pub sendfd_sock_path: PathBuf,
     pub size_of_ringbuf: usize,
     pub process_duration: Duration,
+    pub ringbuf_expire: Duration,
+    pub ringbuf_check_interval: Duration,
 }
-
-pub type ShareRingbufSet = Arc<DashMap<String, Ringbuf>>;
 
 impl<D, Item> RingbufConsumer<D, Item>
 where
@@ -46,7 +49,12 @@ where
         settings: ConsumerSettings,
         decoder: D,
     ) -> Receiver<Item> {
-        let rings = DashMap::new();
+        let ringbuf_store = ExpireDashMap::new(
+            settings.ringbuf_expire,
+            settings.ringbuf_check_interval,
+        )
+        .await;
+
         let (send, recv) = channel(1024);
 
         let notify = Arc::new(Notify::new());
@@ -54,27 +62,27 @@ where
         let cancel_token = CancellationToken::new();
 
         let consumer = RingbufConsumer {
-            rings: Arc::new(rings),
+            ringbuf_store,
             decoder,
             sender: send,
             notify: notify.clone(),
             cancel: cancel_token.clone(),
         };
 
-        let rings = consumer.rings.clone();
+        let ringbuf_store = consumer.ringbuf_store.clone();
         let cancel_token_clone = cancel_token.clone();
 
         // 1. start the server to receive the fd.
         tokio::spawn(async move {
             let mut server = FdRecvServer::with_shutdown(
                 settings.sendfd_sock_path,
-                rings,
+                ringbuf_store,
                 Some(cancel_token_clone.cancelled()),
             );
             server.run().await.unwrap();
         });
 
-        let rings = consumer.rings.clone();
+        let ringbuf_store = consumer.ringbuf_store.clone();
         let cancel_token_clone = cancel_token.clone();
 
         // 2. start the server to receive the control message.
@@ -82,7 +90,7 @@ where
             let mut server = ShmCtlServer::with_shutdown(
                 settings.control_sock_path,
                 notify,
-                rings,
+                ringbuf_store,
                 Some(cancel_token_clone.cancelled()),
             );
             server.run().await.unwrap();
@@ -127,7 +135,7 @@ where
     }
 
     async fn process_ringbufs(&mut self) -> Result<()> {
-        for mut ring in self.rings.iter_mut() {
+        for (_, mut ring) in self.ringbuf_store.iter_mut() {
             self.process_ringbuf(&mut ring).await?;
         }
         Ok(())

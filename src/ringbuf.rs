@@ -46,6 +46,7 @@ pub(crate) const VERSION: u32 = 1;
 ///
 /// 1. data part 0 and data part 1 are mapped to the same physical memory.
 /// 2. The len of metadata part is align(METADATA_LEN, page_size).
+#[derive(Clone)]
 pub struct Ringbuf {
     /// The raw pointer to the data part.
     data_part_ptr: *mut u8,

@@ -25,6 +25,8 @@ async fn prepare() -> (Receiver<String>, RingbufProducer) {
         sendfd_sock_path: sendfd_sock_path.clone(),
         size_of_ringbuf,
         process_duration: Duration::from_millis(10),
+        ringbuf_expire: Duration::from_secs(10),
+        ringbuf_check_interval: Duration::from_secs(3),
     };
 
     let recv_msgs =

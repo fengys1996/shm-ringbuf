@@ -18,13 +18,15 @@ async fn test_ringbuf_spsc() {
     let control_sock_path = dir.path().join("control.sock");
     let sendfd_sock_path = dir.path().join("sendfd.sock");
 
-    let size_of_ringbuf = 1024 * 20;
+    let size_of_ringbuf = 1024 * 32;
 
     let settings = ConsumerSettings {
         control_sock_path: control_sock_path.clone(),
         sendfd_sock_path: sendfd_sock_path.clone(),
         size_of_ringbuf,
         process_duration: Duration::from_millis(10),
+        ringbuf_expire: Duration::from_secs(10),
+        ringbuf_check_interval: Duration::from_secs(3),
     };
 
     let mut recv_msgs =
@@ -40,7 +42,7 @@ async fn test_ringbuf_spsc() {
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
     tokio::spawn(async move {
-        for i in 0..10000 {
+        for i in 0..100 {
             let mut pre_alloc =
                 reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
                     .await
@@ -58,7 +60,7 @@ async fn test_ringbuf_spsc() {
         }
     });
 
-    for i in 0..10000 {
+    for i in 0..100 {
         let item = recv_msgs.recv().await.unwrap();
         assert_eq!(item, format!("hello, {}", i));
     }

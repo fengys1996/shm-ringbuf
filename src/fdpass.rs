@@ -19,7 +19,7 @@ use tracing::error;
 use tracing::info;
 use tracing::warn;
 
-use crate::consumer::ShareRingbufSet;
+use crate::consumer::RingbufStore;
 use crate::error;
 use crate::error::Result;
 use crate::ringbuf::Ringbuf;
@@ -29,7 +29,7 @@ use crate::ringbuf::Ringbuf;
 pub struct FdRecvServer<F> {
     /// The unix sock path for receiving fd.
     sock_path: PathBuf,
-    ring_set: ShareRingbufSet,
+    ringbuf_store: RingbufStore,
     shutdown: Option<F>,
 }
 
@@ -39,12 +39,12 @@ where
 {
     pub fn with_shutdown(
         sock_path: impl Into<PathBuf>,
-        ring_set: ShareRingbufSet,
+        ringbuf_store: RingbufStore,
         shutdown: Option<F>,
     ) -> Self {
         FdRecvServer {
             sock_path: sock_path.into(),
-            ring_set,
+            ringbuf_store,
             shutdown,
         }
     }
@@ -78,7 +78,7 @@ where
 
         let mut handler = Handler {
             stream,
-            ring_set: self.ring_set.clone(),
+            ringbuf_store: self.ringbuf_store.clone(),
         };
 
         if let Err(e) = handler.handle().await {
@@ -91,7 +91,7 @@ where
 
 struct Handler {
     stream: UnixStream,
-    ring_set: ShareRingbufSet,
+    ringbuf_store: RingbufStore,
 }
 
 impl Handler {
@@ -118,7 +118,7 @@ impl Handler {
         let ringbuf = Ringbuf::from_raw(&file, len_of_ringbuf as usize)?;
 
         // 5. store the ringbuf to ring_set.
-        self.ring_set.insert(id, ringbuf);
+        self.ringbuf_store.set(id, ringbuf);
 
         Ok(())
     }
