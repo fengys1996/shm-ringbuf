@@ -1,6 +1,4 @@
 use std::fs;
-use std::path::PathBuf;
-use std::str::FromStr;
 use std::time::Duration;
 
 use shm_ringbuf::consumer::decode::ToStringDecoder;
@@ -16,18 +14,17 @@ use tokio::time::sleep;
 async fn test_ringbuf_spsc() {
     tracing_subscriber::fmt::init();
 
-    let control_sock_path = PathBuf::from_str("/tmp/1.txt").unwrap();
-    let sendfd_sock_path = PathBuf::from_str("/tmp/2.txt").unwrap();
-    let size_of_ringbuf = 1024 * 20;
+    let dir = tempfile::tempdir().unwrap();
+    let control_sock_path = dir.path().join("control.sock");
+    let sendfd_sock_path = dir.path().join("sendfd.sock");
 
-    let _ = fs::remove_file(&control_sock_path);
-    let _ = fs::remove_file(&sendfd_sock_path);
+    let size_of_ringbuf = 1024 * 20;
 
     let settings = ConsumerSettings {
         control_sock_path: control_sock_path.clone(),
         sendfd_sock_path: sendfd_sock_path.clone(),
         size_of_ringbuf,
-        process_duration: Duration::from_millis(100),
+        process_duration: Duration::from_millis(10),
     };
 
     let mut recv_msgs =
@@ -43,7 +40,7 @@ async fn test_ringbuf_spsc() {
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
     tokio::spawn(async move {
-        for i in 1..10000 {
+        for i in 0..10000 {
             let mut pre_alloc =
                 reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
                     .await
@@ -61,7 +58,7 @@ async fn test_ringbuf_spsc() {
         }
     });
 
-    for i in 1..10000 {
+    for i in 0..10000 {
         let item = recv_msgs.recv().await.unwrap();
         assert_eq!(item, format!("hello, {}", i));
     }

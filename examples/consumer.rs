@@ -12,28 +12,28 @@ use tracing::info;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let control_sock_path = PathBuf::from_str("/tmp/1.txt").unwrap();
-    let sendfd_sock_path = PathBuf::from_str("/tmp/2.txt").unwrap();
+    let settings = consumer_settings();
+    let decoder = ToStringDecoder;
+    let mut item_recv = RingbufConsumer::start_consume(settings, decoder).await;
+
+    while let Some(item) = item_recv.recv().await {
+        info!("{:?}", item);
+    }
+}
+
+fn consumer_settings() -> ConsumerSettings {
+    let control_sock_path = PathBuf::from_str("/tmp/ctl.sock").unwrap();
+    let sendfd_sock_path = PathBuf::from_str("/tmp/fd.sock").unwrap();
     let size_of_ringbuf = 1024 * 20;
+    let process_duration = Duration::from_secs(1);
 
     let _ = fs::remove_file(&control_sock_path);
     let _ = fs::remove_file(&sendfd_sock_path);
 
-    let settings = ConsumerSettings {
+    ConsumerSettings {
         control_sock_path: control_sock_path.clone(),
         sendfd_sock_path: sendfd_sock_path.clone(),
         size_of_ringbuf,
-        process_duration: Duration::from_secs(1),
-    };
-
-    let mut recv =
-        RingbufConsumer::start_consume(settings, ToStringDecoder).await;
-
-    tokio::spawn(async move {
-        while let Some(item) = recv.recv().await {
-            info!("{:?}", item);
-        }
-    });
-
-    tokio::time::sleep(Duration::from_secs(100)).await;
+        process_duration,
+    }
 }

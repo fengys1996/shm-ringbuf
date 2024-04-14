@@ -14,20 +14,10 @@ use tracing::info;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let control_sock_path = PathBuf::from_str("/tmp/1.txt").unwrap();
-    let sendfd_sock_path = PathBuf::from_str("/tmp/2.txt").unwrap();
-    let size_of_ringbuf = 1024 * 20;
-
-    let settings = ProducerSettings {
-        control_sock_path,
-        sendfd_sock_path,
-        size_of_ringbuf,
-        heartbeat_interval_second: 1,
-    };
-
+    let settings = producer_settings();
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
-    for i in 1..10000 {
+    for i in 0..10000 {
         let mut pre_alloc =
             reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
                 .await
@@ -43,10 +33,20 @@ async fn main() {
         pre_alloc.write(write_str.as_bytes()).unwrap();
 
         pre_alloc.commit_and_notify(100).await;
+    }
+}
 
-        if i % 50 == 0 {
-            sleep(Duration::from_secs(1)).await;
-        }
+fn producer_settings() -> ProducerSettings {
+    let control_sock_path = PathBuf::from_str("/tmp/ctl.sock").unwrap();
+    let sendfd_sock_path = PathBuf::from_str("/tmp/fd.sock").unwrap();
+    let size_of_ringbuf = 1024 * 20;
+    let heartbeat_interval_second = 1;
+
+    ProducerSettings {
+        control_sock_path,
+        sendfd_sock_path,
+        size_of_ringbuf,
+        heartbeat_interval_second,
     }
 }
 
@@ -65,6 +65,7 @@ async fn reserve_with_retry(
         if !matches!(err, error::Error::NotEnoughSpace { .. }) {
             break;
         }
+
         info!("reserve failed, retry: {}, error: {:?}", size, err);
         sleep(retry_interval).await;
     }
