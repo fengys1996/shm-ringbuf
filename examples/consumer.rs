@@ -1,4 +1,6 @@
 use std::fs;
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration;
 
 use shm_ringbuf::consumer::decode::ToStringDecoder;
@@ -10,16 +12,17 @@ use tracing::info;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let control_sock_path = "/tmp/1.txt";
-    let sendfd_sock_path = "/tmp/2.txt";
+    let control_sock_path = PathBuf::from_str("/tmp/1.txt").unwrap();
+    let sendfd_sock_path = PathBuf::from_str("/tmp/2.txt").unwrap();
+    let size_of_ringbuf = 1024 * 20;
 
-    let _ = fs::remove_file(control_sock_path);
-    let _ = fs::remove_file(sendfd_sock_path);
+    let _ = fs::remove_file(&control_sock_path);
+    let _ = fs::remove_file(&sendfd_sock_path);
 
     let settings = ConsumerSettings {
-        control_sock_path: control_sock_path.to_string(),
-        sendfd_sock_path: sendfd_sock_path.to_string(),
-        size_of_ringbuf: 1024 * 20,
+        control_sock_path: control_sock_path.clone(),
+        sendfd_sock_path: sendfd_sock_path.clone(),
+        size_of_ringbuf,
         process_duration: Duration::from_secs(1),
     };
 

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration;
 use std::usize;
 
@@ -12,13 +14,14 @@ use tracing::info;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let control_sock_path = "/tmp/1.txt";
-    let sendfd_sock_path = "/tmp/2.txt";
+    let control_sock_path = PathBuf::from_str("/tmp/1.txt").unwrap();
+    let sendfd_sock_path = PathBuf::from_str("/tmp/2.txt").unwrap();
+    let size_of_ringbuf = 1024 * 20;
 
     let settings = ProducerSettings {
-        control_sock_file_path: control_sock_path.to_string(),
-        sendfd_sock_path: sendfd_sock_path.to_string(),
-        size_of_ringbuf: 1024 * 20,
+        control_sock_path,
+        sendfd_sock_path,
+        size_of_ringbuf,
         heartbeat_interval_second: 1,
     };
 

@@ -21,8 +21,16 @@ tower = { version = "0.4" }
 tracing = { version = "0.1" }
 
 [dev-dependencies]
+criterion = { version = "0.5" }
 tempfile = { version = "3.2" }
 tracing-subscriber = { version = "0.3" }
 
 [build-dependencies]
 tonic-build = "0.11"
+
+[[bench]]
+name = "ringbuf_spsc"
+harness = false
+
+[profile.release]
+debug = 1

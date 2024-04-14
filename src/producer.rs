@@ -1,6 +1,7 @@
 pub mod prealloc;
 
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -35,8 +36,8 @@ pub struct RingbufProducer {
 
 #[derive(Clone)]
 pub struct ProducerSettings {
-    pub control_sock_file_path: String,
-    pub sendfd_sock_path: String,
+    pub control_sock_path: PathBuf,
+    pub sendfd_sock_path: PathBuf,
     pub size_of_ringbuf: usize,
     pub heartbeat_interval_second: u64,
 }
@@ -46,7 +47,7 @@ impl RingbufProducer {
         settings: ProducerSettings,
     ) -> Result<RingbufProducer> {
         let ProducerSettings {
-            control_sock_file_path,
+            control_sock_path,
             size_of_ringbuf,
             ..
         } = &settings;
@@ -59,10 +60,8 @@ impl RingbufProducer {
             size: size_of_ringbuf as u64 * 2,
         })?;
 
-        let grpc_client = Arc::new(GrpcClient::new(
-            client_id.clone(),
-            control_sock_file_path,
-        ));
+        let grpc_client =
+            Arc::new(GrpcClient::new(client_id.clone(), control_sock_path));
 
         let ringbuf =
             Arc::new(RwLock::new(Ringbuf::new(&memfd, size_of_ringbuf)?));

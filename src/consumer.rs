@@ -1,5 +1,6 @@
 pub mod decode;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,8 +29,8 @@ pub struct RingbufConsumer<D, Item> {
 }
 
 pub struct ConsumerSettings {
-    pub control_sock_path: String,
-    pub sendfd_sock_path: String,
+    pub control_sock_path: PathBuf,
+    pub sendfd_sock_path: PathBuf,
     pub size_of_ringbuf: usize,
     pub process_duration: Duration,
 }
