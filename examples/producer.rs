@@ -1,6 +1,7 @@
 use std::time::Duration;
 use std::usize;
 
+use shm_ringbuf::error;
 use shm_ringbuf::producer::prealloc::PreAlloc;
 use shm_ringbuf::producer::ProducerSettings;
 use shm_ringbuf::producer::RingbufProducer;
@@ -24,7 +25,10 @@ async fn main() {
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
     for i in 1..10000 {
-        let mut pre_alloc = producer.reserve(20).unwrap();
+        let mut pre_alloc =
+            reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
+                .await
+                .unwrap();
 
         let write_str = format!("hello, {}", i);
         info!("write: {}", write_str);
@@ -41,6 +45,28 @@ async fn main() {
             sleep(Duration::from_secs(1)).await;
         }
     }
+}
+
+async fn reserve_with_retry(
+    producer: &RingbufProducer,
+    size: usize,
+    retry_num: usize,
+    retry_interval: Duration,
+) -> Result<PreAlloc, String> {
+    for _ in 0..retry_num {
+        let err = match producer.reserve(size) {
+            Ok(pre) => return Ok(pre),
+            Err(e) => e,
+        };
+
+        if !matches!(err, error::Error::NotEnoughSpace { .. }) {
+            break;
+        }
+        info!("reserve failed, retry: {}, error: {:?}", size, err);
+        sleep(retry_interval).await;
+    }
+
+    Err("reserve failed".to_string())
 }
 
 async fn wait_consumer_online(

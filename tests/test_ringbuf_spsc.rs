@@ -4,6 +4,7 @@ use std::time::Duration;
 use shm_ringbuf::consumer::decode::ToStringDecoder;
 use shm_ringbuf::consumer::ConsumerSettings;
 use shm_ringbuf::consumer::RingbufConsumer;
+use shm_ringbuf::error;
 use shm_ringbuf::producer::prealloc::PreAlloc;
 use shm_ringbuf::producer::ProducerSettings;
 use shm_ringbuf::producer::RingbufProducer;
@@ -41,7 +42,10 @@ async fn test_ringbuf_spsc() {
 
     tokio::spawn(async move {
         for i in 1..10000 {
-            let mut pre_alloc = producer.reserve(20).unwrap();
+            let mut pre_alloc =
+                reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
+                    .await
+                    .unwrap();
 
             let write_str = format!("hello, {}", i);
 
@@ -62,6 +66,27 @@ async fn test_ringbuf_spsc() {
 
     let _ = fs::remove_file(control_sock_path);
     let _ = fs::remove_file(sendfd_sock_path);
+}
+
+async fn reserve_with_retry(
+    producer: &RingbufProducer,
+    size: usize,
+    retry_num: usize,
+    retry_interval: Duration,
+) -> Result<PreAlloc, String> {
+    for _ in 0..retry_num {
+        let err = match producer.reserve(size) {
+            Ok(pre) => return Ok(pre),
+            Err(e) => e,
+        };
+
+        if !matches!(err, error::Error::NotEnoughSpace { .. }) {
+            break;
+        }
+        sleep(retry_interval).await;
+    }
+
+    Err("reserve failed".to_string())
 }
 
 async fn wait_consumer_online(
