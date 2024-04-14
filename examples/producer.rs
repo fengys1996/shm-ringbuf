@@ -4,6 +4,7 @@ use std::usize;
 use shm_ringbuf::producer::prealloc::PreAlloc;
 use shm_ringbuf::producer::ProducerSettings;
 use shm_ringbuf::producer::RingbufProducer;
+use tokio::time::sleep;
 use tracing::info;
 
 #[tokio::main]
@@ -37,7 +38,7 @@ async fn main() {
         pre_alloc.commit_and_notify(100).await;
 
         if i % 50 == 0 {
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            sleep(Duration::from_secs(1)).await;
         }
     }
 }
@@ -51,7 +52,7 @@ async fn wait_consumer_online(
         if pre_alloc.online() {
             return Ok(());
         }
-        tokio::time::sleep(retry_interval).await;
+        sleep(retry_interval).await;
     }
 
     Err("wait consumer online timeout".to_string())
