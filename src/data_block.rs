@@ -131,7 +131,7 @@ impl<T> DataBlock<T> {
         }
     }
 
-    pub(crate) fn total_len(&self) -> u32 {
+    pub fn total_len(&self) -> u32 {
         self.capacity() + HEADER_LEN as u32
     }
 

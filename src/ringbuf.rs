@@ -67,8 +67,11 @@ unsafe impl Sync for Ringbuf {}
 
 impl Ringbuf {
     /// Create a new ring buffer from the file, and reset the metadata.
-    pub fn new(file: &fs::File, data_size: usize) -> Result<Self> {
-        let ringbuf = Self::from_raw(file, data_size)?;
+    pub fn new(
+        file: &fs::File,
+        expected_data_part_bytes: usize,
+    ) -> Result<Self> {
+        let ringbuf = Self::from(file, expected_data_part_bytes)?;
 
         ringbuf.metadata.atomic_set_consume_offset(0);
         ringbuf.metadata.atomic_set_produce_offset(0);
@@ -77,22 +80,19 @@ impl Ringbuf {
     }
 
     /// Create a new ring buffer from the raw file.
-    ///
-    /// ## Note
-    ///
-    /// 1. The length paramter is not the actual length of the data part.
-    /// This length parameter will be referenced when creating ringbuf.
-    /// 2. create a ringbuf, but not reset the metadata.
-    pub fn from_raw(file: &fs::File, length: usize) -> Result<Self> {
+    pub fn from(
+        file: &fs::File,
+        expected_data_part_bytes: usize,
+    ) -> Result<Self> {
         ensure!(
-            length > 0,
+            expected_data_part_bytes > 0,
             error::InvalidParameterSnafu {
                 detail: "The data_size must be greater than 0.",
             }
         );
 
         let align_metadata_size = page_align_size(METADATA_LEN);
-        let align_data_size = page_align_size(length);
+        let align_data_size = page_align_size(expected_data_part_bytes);
 
         info!(
             "actual metadata size: {}, actual data_part size: {}",
@@ -167,6 +167,13 @@ impl Ringbuf {
         };
 
         Ok(ringbuf)
+    }
+
+    pub fn actual_alloc_bytes(expected_data_part_bytes: usize) -> usize {
+        let align_metadata_size = page_align_size(METADATA_LEN);
+        let align_data_size = page_align_size(expected_data_part_bytes);
+
+        align_metadata_size + align_data_size
     }
 
     pub fn reserve(&mut self, bytes: usize) -> Result<DataBlock<DropGuard>> {
@@ -266,7 +273,7 @@ impl Ringbuf {
         self.metadata.atomic_consume_offset()
     }
 
-    fn atomic_set_consume_offset(&self, offset: u32) {
+    pub fn atomic_set_consume_offset(&self, offset: u32) {
         self.metadata.atomic_set_consume_offset(offset)
     }
 
@@ -278,7 +285,7 @@ impl Ringbuf {
         self.metadata.atomic_produce_offset()
     }
 
-    fn atomic_set_produce_offset(&self, offset: u32) {
+    pub fn atomic_set_produce_offset(&self, offset: u32) {
         self.metadata.atomic_set_produce_offset(offset)
     }
 }
@@ -314,6 +321,8 @@ fn sys_page_size() -> usize {
 
 #[cfg(test)]
 mod tests {
+    use super::Ringbuf;
+    use crate::error;
     use crate::ringbuf::page_align_size;
     use crate::ringbuf::{self};
 
@@ -330,8 +339,7 @@ mod tests {
             ringbuf_producer.advance_produce_offset(4);
         }
 
-        let mut ringbuf_consumer =
-            ringbuf::Ringbuf::from_raw(&file, 1024).unwrap();
+        let mut ringbuf_consumer = ringbuf::Ringbuf::from(&file, 1024).unwrap();
         assert_eq!(ringbuf_consumer.atomic_consume_offset(), 4);
         assert_eq!(ringbuf_consumer.atomic_produce_offset(), 12);
 
@@ -384,5 +392,29 @@ mod tests {
             ringbuf_producer.advance_produce_offset(9);
         }
         assert_eq!(ringbuf_producer.produce_offset(), 9);
+    }
+
+    #[test]
+    fn test_ringbuf_write() {
+        let data_size = 1024 * 32;
+
+        let file = tempfile::tempfile().unwrap();
+        let actual_alloc_bytes = Ringbuf::actual_alloc_bytes(data_size);
+        file.set_len(actual_alloc_bytes as u64).unwrap();
+
+        let mut ringbuf = Ringbuf::new(&file, data_size).unwrap();
+
+        for i in 1..10000 {
+            let result = ringbuf.reserve(20);
+            if matches!(result, Err(error::Error::NotEnoughSpace { .. })) {
+                ringbuf.atomic_set_produce_offset(0);
+                continue;
+            }
+            let mut pre_alloc = result.unwrap();
+            let write_str = format!("hello, {}", i);
+            // Unwrap is safe here because we have enough space.
+            pre_alloc.write(write_str.as_bytes()).unwrap();
+            pre_alloc.commit();
+        }
     }
 }

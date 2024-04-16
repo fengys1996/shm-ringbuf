@@ -115,7 +115,7 @@ impl Handler {
         let file = unsafe { File::from_raw_fd(fd) };
 
         // 4. create the ringbuf.
-        let ringbuf = Ringbuf::from_raw(&file, len_of_ringbuf as usize)?;
+        let ringbuf = Ringbuf::from(&file, len_of_ringbuf as usize)?;
 
         // 5. store the ringbuf to ring_set.
         self.ringbuf_store.set(id, ringbuf);

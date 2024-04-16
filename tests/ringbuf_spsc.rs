@@ -41,8 +41,9 @@ async fn test_ringbuf_spsc() {
 
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
+    let msg_num = 10000;
     tokio::spawn(async move {
-        for i in 0..100 {
+        for i in 0..msg_num {
             let mut pre_alloc =
                 reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
                     .await
@@ -60,7 +61,7 @@ async fn test_ringbuf_spsc() {
         }
     });
 
-    for i in 0..100 {
+    for i in 0..msg_num {
         let item = recv_msgs.recv().await.unwrap();
         assert_eq!(item, format!("hello, {}", i));
     }
