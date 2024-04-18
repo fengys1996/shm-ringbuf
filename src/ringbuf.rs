@@ -93,6 +93,9 @@ impl Ringbuf {
 
         let align_metadata_size = page_align_size(METADATA_LEN);
         let align_data_size = page_align_size(expected_data_part_bytes);
+        let total_size = align_metadata_size + align_data_size * 2;
+
+        file.set_len(total_size as u64).context(error::IoSnafu)?;
 
         info!(
             "actual metadata size: {}, actual data_part size: {}",
@@ -105,9 +108,7 @@ impl Ringbuf {
         let private_flags = MapFlags::MAP_PRIVATE | MapFlags::MAP_ANONYMOUS;
         let public_flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
 
-        let total_size =
-            NonZeroUsize::new(align_metadata_size + align_data_size * 2)
-                .unwrap();
+        let total_size = NonZeroUsize::new(total_size).unwrap();
 
         let anchor_ptr = unsafe {
             mman::mmap_anonymous(None, total_size, none_prot, private_flags)
@@ -167,13 +168,6 @@ impl Ringbuf {
         };
 
         Ok(ringbuf)
-    }
-
-    pub fn actual_alloc_bytes(expected_data_part_bytes: usize) -> usize {
-        let align_metadata_size = page_align_size(METADATA_LEN);
-        let align_data_size = page_align_size(expected_data_part_bytes);
-
-        align_metadata_size + align_data_size
     }
 
     pub fn reserve(&mut self, bytes: usize) -> Result<DataBlock<DropGuard>> {
@@ -329,7 +323,6 @@ mod tests {
     #[test]
     fn test_ringbuf_metadata() {
         let file = tempfile::tempfile().unwrap();
-        file.set_len(1024).unwrap();
 
         let mut ringbuf_producer = ringbuf::Ringbuf::new(&file, 1024).unwrap();
         ringbuf_producer.atomic_set_consume_offset(4);
@@ -354,7 +347,6 @@ mod tests {
     #[test]
     fn test_ringbuf_remain_bytes() {
         let file = tempfile::tempfile().unwrap();
-        file.set_len(1024).unwrap();
 
         let mut ringbuf_producer = ringbuf::Ringbuf::new(&file, 1024).unwrap();
         let actual_alloc_bytes = page_align_size(1024) as u32;
@@ -376,7 +368,6 @@ mod tests {
     #[test]
     fn test_ringbuf_advance() {
         let file = tempfile::tempfile().unwrap();
-        file.set_len(1024).unwrap();
 
         let mut ringbuf_producer = ringbuf::Ringbuf::new(&file, 1024).unwrap();
         let actual_alloc_bytes = page_align_size(1024) as u32;
@@ -399,9 +390,6 @@ mod tests {
         let data_size = 1024 * 32;
 
         let file = tempfile::tempfile().unwrap();
-        let actual_alloc_bytes = Ringbuf::actual_alloc_bytes(data_size);
-        file.set_len(actual_alloc_bytes as u64).unwrap();
-
         let mut ringbuf = Ringbuf::new(&file, data_size).unwrap();
 
         for i in 1..10000 {
