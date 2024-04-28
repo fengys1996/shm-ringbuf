@@ -1,4 +1,3 @@
-use std::mem::align_of;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 
@@ -48,7 +47,6 @@ impl RingbufMetadata {
 
     pub fn atomic_produce_offset(&self) -> u32 {
         let ptr = self.produce_offset_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.load(Ordering::Relaxed)
@@ -56,7 +54,6 @@ impl RingbufMetadata {
 
     pub fn atomic_set_produce_offset(&self, offset: u32) {
         let ptr = self.produce_offset_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.store(offset, Ordering::Relaxed);
@@ -64,14 +61,12 @@ impl RingbufMetadata {
 
     pub fn consume_offset(&self) -> u32 {
         let ptr = self.consume_offset_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
 
         unsafe { *ptr }
     }
 
     pub fn atomic_consume_offset(&self) -> u32 {
         let ptr = self.consume_offset_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.load(Ordering::Relaxed)
@@ -79,7 +74,6 @@ impl RingbufMetadata {
 
     pub fn atomic_set_consume_offset(&self, offset: u32) {
         let ptr = self.consume_offset_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<AtomicU32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.store(offset, Ordering::Relaxed);

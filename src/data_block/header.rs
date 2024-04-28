@@ -1,4 +1,3 @@
-use std::mem::align_of;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 
@@ -51,7 +50,6 @@ impl Header {
 
     pub fn atomic_set_capacity(&self, capacity: u32) {
         let ptr = self.capacity_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.store(capacity, Ordering::Relaxed);
@@ -63,7 +61,6 @@ impl Header {
 
     pub fn atomic_len(&self) -> u32 {
         let ptr = self.len_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.load(Ordering::Relaxed)
@@ -71,7 +68,6 @@ impl Header {
 
     pub fn atomic_set_len(&self, len: u32) {
         let ptr = self.len_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.store(len, Ordering::Relaxed);
@@ -79,7 +75,6 @@ impl Header {
 
     pub fn atomic_busy(&self) -> u32 {
         let ptr = self.busy_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.load(Ordering::Relaxed)
@@ -87,7 +82,6 @@ impl Header {
 
     pub fn atomic_set_busy(&self, busy: u32) {
         let ptr = self.busy_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.store(busy, Ordering::Relaxed);
@@ -95,7 +89,6 @@ impl Header {
 
     pub fn advance_len(&self, len: u32) {
         let ptr = self.len_ptr;
-        debug_assert!(ptr.is_aligned_to(align_of::<u32>()));
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.fetch_add(len, Ordering::Relaxed);

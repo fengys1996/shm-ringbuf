@@ -5,7 +5,6 @@ use std::fs;
 use std::num::NonZeroUsize;
 use std::ptr::NonNull;
 use std::sync::Arc;
-use std::usize;
 
 use nix::libc::_SC_PAGESIZE;
 use nix::sys::mman;
@@ -108,35 +107,46 @@ impl Ringbuf {
         let private_flags = MapFlags::MAP_PRIVATE | MapFlags::MAP_ANONYMOUS;
         let public_flags = MapFlags::MAP_SHARED | MapFlags::MAP_FIXED;
 
+        // Unwrap is safe here because total_size is not zero.
         let total_size = NonZeroUsize::new(total_size).unwrap();
 
-        let anchor_ptr = unsafe {
+        // 1. Allocate the memory for the metadata and data part.
+        let anchor_ptr_c_void = unsafe {
             mman::mmap_anonymous(None, total_size, none_prot, private_flags)
                 .context(error::MmapAnonymousSnafu)?
         };
 
-        let anchor_addr = anchor_ptr.addr();
+        let anchor_ptr = anchor_ptr_c_void.as_ptr() as *mut u8;
+
+        // 2. Map the metadata part.
+        // Unwrap is safe here because align_metadata_size + align_data_size is not zero.
         let mmap_len =
             NonZeroUsize::new(align_metadata_size + align_data_size).unwrap();
-
+        // Unwrap is safe here because anchor_ptr is not null.
+        let start_addr = NonZeroUsize::new(anchor_ptr as usize).unwrap();
+        let offset = 0;
         let metadata_ptr = unsafe {
             mman::mmap(
-                Some(anchor_addr),
+                Some(start_addr),
                 mmap_len,
                 rw_prot,
                 public_flags,
                 file,
-                0,
+                offset,
             )
             .context(error::MmapSnafu)?
+            .as_ptr() as *mut u8
         };
 
+        // 3. Map the data part.
+        // Unwrap is safe here because metadata_ptr is not null.
         let mmap_len = NonZeroUsize::new(align_data_size).unwrap();
         let start_addr = unsafe {
-            anchor_ptr.add(align_metadata_size + align_data_size).addr()
+            let ptr = anchor_ptr.add(align_metadata_size + align_data_size);
+            // Unwrap is safe here because ptr is not null.
+            NonZeroUsize::new(ptr as usize).unwrap()
         };
         let offset = align_metadata_size as i64;
-
         let _ = unsafe {
             mman::mmap(
                 Some(start_addr),
@@ -149,12 +159,12 @@ impl Ringbuf {
             .context(error::MmapSnafu)?
         };
 
-        let data_part_ptr =
-            unsafe { anchor_ptr.add(align_metadata_size).as_ptr() as *mut u8 };
+        // 4. Build the ring buffer.
+        let data_part_ptr = unsafe { anchor_ptr.add(align_metadata_size) };
         let data_part_len = align_data_size;
-        let metadata =
-            unsafe { RingbufMetadata::new(metadata_ptr.as_ptr() as *mut u8) };
+        let metadata = unsafe { RingbufMetadata::new(metadata_ptr) };
 
+        let anchor_ptr = NonNull::new(anchor_ptr as *mut c_void).unwrap();
         let drop_guard = Arc::new(DropGuard {
             mmap_ptr: anchor_ptr,
             mmap_len: total_size.get(),

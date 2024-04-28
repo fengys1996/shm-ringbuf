@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
-use std::usize;
 
 use shm_ringbuf::error;
 use shm_ringbuf::producer::prealloc::PreAlloc;

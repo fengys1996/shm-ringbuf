@@ -7,7 +7,6 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
-use std::usize;
 
 use tracing::error;
 use tracing::info;
