@@ -24,7 +24,6 @@ async fn main() {
 fn consumer_settings() -> ConsumerSettings {
     let control_sock_path = PathBuf::from_str("/tmp/ctl.sock").unwrap();
     let sendfd_sock_path = PathBuf::from_str("/tmp/fd.sock").unwrap();
-    let size_of_ringbuf = 1024 * 32;
     let process_duration = Duration::from_millis(10);
 
     let _ = fs::remove_file(&control_sock_path);
@@ -33,7 +32,6 @@ fn consumer_settings() -> ConsumerSettings {
     ConsumerSettings {
         control_sock_path: control_sock_path.clone(),
         sendfd_sock_path: sendfd_sock_path.clone(),
-        size_of_ringbuf,
         process_duration,
         ringbuf_expire: Duration::from_secs(10),
         ringbuf_check_interval: Duration::from_secs(3),

@@ -34,7 +34,6 @@ pub type RingbufStore = ExpireDashMap<Ringbuf>;
 pub struct ConsumerSettings {
     pub control_sock_path: PathBuf,
     pub sendfd_sock_path: PathBuf,
-    pub size_of_ringbuf: usize,
     pub process_duration: Duration,
     pub ringbuf_expire: Duration,
     pub ringbuf_check_interval: Duration,
