@@ -62,7 +62,7 @@ async fn test_ringbuf_spsc() {
 
     for i in 0..msg_num {
         let item = recv_msgs.recv().await.unwrap();
-        assert_eq!(item, format!("hello, {}", i));
+        assert_eq!(item.unwrap(), format!("hello, {}", i));
     }
 
     let _ = fs::remove_file(control_sock_path);

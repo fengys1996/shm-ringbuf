@@ -1,7 +1,9 @@
 pub mod decode;
 pub(crate) mod rings_store;
 
+use std::fmt::Debug;
 use std::path::PathBuf;
+use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,14 +18,13 @@ use tracing::warn;
 use self::decode::Context;
 use self::decode::Decode;
 use self::rings_store::ExpireDashMap;
-use crate::error::Result;
 use crate::fdpass::FdRecvServer;
 use crate::grpc::ShmCtlServer;
 use crate::ringbuf::Ringbuf;
 
-pub struct RingbufConsumer<D, Item> {
+pub struct RingbufConsumer<D, Item, E> {
     ringbuf_store: RingbufStore,
-    sender: Sender<Item>,
+    sender: Sender<StdResult<Item, E>>,
     decoder: D,
     notify: Arc<Notify>,
     cancel: CancellationToken,
@@ -39,15 +40,16 @@ pub struct ConsumerSettings {
     pub ringbuf_check_interval: Duration,
 }
 
-impl<D, Item> RingbufConsumer<D, Item>
+impl<D, Item, E> RingbufConsumer<D, Item, E>
 where
-    D: Decode<Item = Item> + 'static,
+    D: Decode<Item = Item, Error = E> + 'static,
     Item: Send + Sync + 'static,
+    E: Debug + Send + 'static,
 {
     pub async fn start_consume(
         settings: ConsumerSettings,
         decoder: D,
-    ) -> Receiver<Item> {
+    ) -> Receiver<StdResult<Item, E>> {
         let ringbuf_store = ExpireDashMap::new(
             settings.ringbuf_expire,
             settings.ringbuf_check_interval,
@@ -114,7 +116,7 @@ where
         cancel: Option<CancellationToken>,
     ) {
         loop {
-            self.process_ringbufs().await.unwrap();
+            self.process_ringbufs().await;
             if let Some(cancel) = &cancel {
                 tokio::select! {
                     _ = self.notify.notified() => {}
@@ -133,20 +135,19 @@ where
         }
     }
 
-    async fn process_ringbufs(&mut self) -> Result<()> {
+    async fn process_ringbufs(&mut self) {
         for (_, mut ring) in self.ringbuf_store.iter_mut() {
-            self.process_ringbuf(&mut ring).await?;
+            self.process_ringbuf(&mut ring).await;
         }
-        Ok(())
     }
 
-    async fn process_ringbuf(&self, ringbuf: &mut Ringbuf) -> Result<()> {
+    async fn process_ringbuf(&self, ringbuf: &mut Ringbuf) {
         while let Some(data_block) = ringbuf.peek() {
             if data_block.atomic_is_busy() {
                 break;
             }
 
-            let item = self.decoder.decode(data_block.slice(), Context {})?;
+            let item = self.decoder.decode(data_block.slice(), Context {});
             if let Err(e) = self.sender.send(item).await {
                 warn!("item recv is dropped, trigger server shutdown, detail: {:?}", e);
                 self.cancel.cancel();
@@ -154,11 +155,10 @@ where
             }
             unsafe { ringbuf.advance_consume_offset(data_block.total_len()) }
         }
-        Ok(())
     }
 }
 
-impl<D, Item> Drop for RingbufConsumer<D, Item> {
+impl<D, Item, E> Drop for RingbufConsumer<D, Item, E> {
     fn drop(&mut self) {
         self.cancel.cancel();
     }
