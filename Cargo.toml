@@ -11,7 +11,7 @@ benchmark = []
 async-trait = { version = "0.1" }
 dashmap = { version = "5.5" }
 memfd = { version = "0.6" }
-nix = { version = "0.28", features = ["mman"] }
+nix = { version = "0.29", features = ["mman"] }
 passfd = { git = "https://github.com/polachok/passfd.git", rev = "d55881752c16aced1a49a75f9c428d38d3767213", features = ["async"] }
 prost = { version = "0.12" }
 uuid = { version = "1.7", features = ["v4"] }
