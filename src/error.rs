@@ -1,3 +1,5 @@
+use std::ffi::NulError;
+
 use snafu::Location;
 use snafu::Snafu;
 
@@ -51,10 +53,10 @@ pub enum Error {
         location: Location,
     },
 
-    #[snafu(display("Failed to operate on memfd, name: {}", operate_name))]
+    #[snafu(display("Failed to create memfd, name: {}", fd_name))]
     MemFd {
-        operate_name: String,
-        source: memfd::Error,
+        fd_name: String,
+        source: nix::Error,
         #[snafu(implicit)]
         location: Location,
     },
@@ -93,6 +95,13 @@ pub enum Error {
     #[snafu(display("Failed to serve with incoming"))]
     ServeWithIncoming {
         source: tonic::transport::Error,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("Contain an internal 0 byte"))]
+    NulZero {
+        source: NulError,
         #[snafu(implicit)]
         location: Location,
     },

@@ -19,7 +19,7 @@ use crate::error::Result;
 use crate::fdpass::send_fd;
 use crate::grpc::GrpcClient;
 use crate::memfd::memfd_create;
-use crate::memfd::MmapSettings;
+use crate::memfd::MemfdSettings;
 use crate::ringbuf::Ringbuf;
 
 #[derive(Clone)]
@@ -54,7 +54,7 @@ impl RingbufProducer {
         let client_id = gen_client_id();
 
         let size_of_ringbuf = *size_of_ringbuf;
-        let memfd = memfd_create(MmapSettings {
+        let memfd = memfd_create(MemfdSettings {
             name: client_id.clone(),
             size: size_of_ringbuf as u64 * 2,
         })?;

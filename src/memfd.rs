@@ -1,38 +1,57 @@
-#![allow(dead_code)]
-use std::fs;
+use std::{
+    ffi::CString,
+    fs,
+    os::fd::{FromRawFd, IntoRawFd},
+};
 
-use crate::error::Result;
+use nix::sys::memfd;
+use snafu::ResultExt;
 
+use crate::error::{self, Result};
+
+/// Settings for creating a memfd.
 #[derive(Debug, Clone)]
-pub struct MmapSettings {
+pub struct MemfdSettings {
+    /// The name of the memfd. Only used for debugging.
     pub name: String,
+    /// The size of the memfd.
     pub size: u64,
 }
 
 /// Create a memfd with the given settings.
-pub fn memfd_create(settings: MmapSettings) -> Result<fs::File> {
-    do_memfd_create(settings)
+pub fn memfd_create(settings: MemfdSettings) -> Result<fs::File> {
+    let MemfdSettings { name, size } = settings;
+
+    let c_name = CString::new(name.clone()).context(error::NulZeroSnafu)?;
+    // TODO: add sealing support. This can prevent some permission issues,
+    // such as a user without write permissions writing to the ringbuf.
+    let flags = memfd::MemFdCreateFlag::MFD_CLOEXEC;
+
+    let owned_fd = memfd::memfd_create(&c_name, flags)
+        .context(error::MemFdSnafu { fd_name: name })?;
+
+    let raw_fd = owned_fd.into_raw_fd();
+
+    let file = unsafe { fs::File::from_raw_fd(raw_fd) };
+    file.set_len(size).context(error::IoSnafu)?;
+
+    Ok(file)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn do_memfd_create(_settings: MmapSettings) -> Result<fs::File> {
-    unimplemented!("memfd_create is only supported on Linux and Android")
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn do_memfd_create(settings: MmapSettings) -> Result<fs::File> {
-    use snafu::ResultExt;
+    #[test]
+    fn test_memfd_create() {
+        let settings = MemfdSettings {
+            name: "memfd".to_string(),
+            size: 1024,
+        };
 
-    use crate::error;
+        let file = memfd_create(settings).unwrap();
 
-    let MmapSettings { name, size } = settings;
-
-    let opts = memfd::MemfdOptions::default().allow_sealing(false);
-    let mfd = opts.create(name).context(error::MemFdSnafu {
-        operate_name: "create",
-    })?;
-
-    mfd.as_file().set_len(size).context(error::IoSnafu)?;
-
-    Ok(mfd.into_file())
+        let metadata = file.metadata().unwrap();
+        assert_eq!(metadata.len(), 1024);
+    }
 }
