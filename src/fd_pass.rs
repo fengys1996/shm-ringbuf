@@ -162,7 +162,7 @@ impl Handler {
         // 6. Create the ringbuf.
         let ringbuf = Ringbuf::from(&file, len_of_ringbuf as usize)?;
 
-        // 7. store the ringbuf to ringbuf store.
+        // 7. Store the ringbuf to ringbuf store.
         self.ringbuf_store.set(client_id, ringbuf);
 
         Ok(())
@@ -291,5 +291,7 @@ mod tests {
             let client_id = format!("client_id_{}", i);
             assert!(rb_store.get(&client_id).is_some());
         }
+
+        cancel.cancel();
     }
 }
