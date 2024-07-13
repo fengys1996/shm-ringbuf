@@ -3,7 +3,7 @@ pub mod error;
 pub mod producer;
 
 mod data_block;
-mod fdpass;
+mod fd_pass;
 mod grpc;
 mod memfd;
 mod ringbuf;

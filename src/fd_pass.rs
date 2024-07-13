@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::future::Future;
 use std::os::fd::AsRawFd;
 use std::os::fd::FromRawFd;
 use std::path::Path;
@@ -10,11 +11,12 @@ use passfd::tokio::FdPassingExt;
 use snafu::location;
 use snafu::Location;
 use snafu::ResultExt;
+use tokio::fs::remove_file;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::UnixListener;
 use tokio::net::UnixStream;
-use tokio::time;
+use tokio::time::sleep;
 use tracing::error;
 use tracing::info;
 use tracing::warn;
@@ -25,18 +27,42 @@ use crate::error::Result;
 use crate::ringbuf::Ringbuf;
 
 /// The server for receiving fd from producer, create Ringbuf, and add the Ringbuf
-/// to ShareRingbufSet.
+/// to RingbufStore.
 pub struct FdRecvServer<F> {
     /// The unix sock path for receiving fd.
     sock_path: PathBuf,
+
+    /// The store is used to manage the Ringbuf.
     ringbuf_store: RingbufStore,
+
+    /// The future for shutdown the server gracefully.
     shutdown: Option<F>,
+}
+
+impl<F> Drop for FdRecvServer<F> {
+    fn drop(&mut self) {
+        if self.sock_path.metadata().is_err() {
+            return;
+        }
+
+        if std::fs::remove_file(&self.sock_path).is_err() {
+            error!(
+                "failed to remove the unix socket file: {:?}",
+                self.sock_path
+            );
+
+            return;
+        }
+
+        info!("remove the unix socket file: {:?}", self.sock_path);
+    }
 }
 
 impl<F> FdRecvServer<F>
 where
-    F: std::future::Future<Output = ()>,
+    F: Future<Output = ()>,
 {
+    /// Create a new FdRecvServer.
     pub fn with_shutdown(
         sock_path: impl Into<PathBuf>,
         ringbuf_store: RingbufStore,
@@ -49,7 +75,14 @@ where
         }
     }
 
+    /// Run the FdRecvServer.
     pub async fn run(&mut self) -> Result<()> {
+        if self.sock_path.metadata().is_ok() {
+            remove_file(&self.sock_path).await.context(error::IoSnafu)?;
+
+            info!("remove the unix socket file: {:?}", self.sock_path);
+        }
+
         let listener =
             UnixListener::bind(&self.sock_path).context(error::IoSnafu)?;
 
@@ -72,6 +105,9 @@ where
         }
     }
 
+    /// Run the server once.
+    ///
+    /// Note: This function tries its best not to fail.
     async fn run_once(&self, listener: &UnixListener) -> Result<()> {
         let stream = accept(listener).await?;
         info!("accept a new unix stream for sending fd.");
@@ -81,9 +117,11 @@ where
             ringbuf_store: self.ringbuf_store.clone(),
         };
 
-        if let Err(e) = handler.handle().await {
-            error!("handle error: {}", e);
-        }
+        tokio::spawn(async move {
+            if let Err(e) = handler.handle().await {
+                error!("handle error: {}", e);
+            }
+        });
 
         Ok(())
     }
@@ -98,27 +136,34 @@ impl Handler {
     async fn handle(&mut self) -> Result<()> {
         let stream = &mut self.stream;
 
-        // 1. Read the length of fd name.
-        let len = stream.read_u32().await.context(error::IoSnafu)?;
+        // 1. Read the length of client id.
+        let len_of_id = stream.read_u32().await.context(error::IoSnafu)?;
 
-        // 2. Read the fd name.
-        let mut buf = vec![0; len as usize];
+        // 2. Read the client id (UTF-8 string).
+        let mut buf = vec![0; len_of_id as usize];
+
         stream.read_exact(&mut buf).await.context(error::IoSnafu)?;
-        let id = String::from_utf8(buf).context(error::FromUtf8Snafu)?;
-        info!("the len of fd name: {}, fd name: {}", len, id);
+
+        let client_id = String::from_utf8(buf).context(error::FromUtf8Snafu)?;
 
         // 3. Read the length of ringbuf.
         let len_of_ringbuf = stream.read_u32().await.context(error::IoSnafu)?;
 
-        // 3. Recv the fd.
+        // 4. Log the client id and the length of client id.
+        info!(
+            "recv a client id: {}, the len of client id: {}, the len of ringbuf: {}",
+            client_id, len_of_id, len_of_ringbuf
+        );
+
+        // 5. Recv the fd.
         let fd = stream.recv_fd().await.context(error::IoSnafu)?;
         let file = unsafe { File::from_raw_fd(fd) };
 
-        // 4. create the ringbuf.
+        // 6. Create the ringbuf.
         let ringbuf = Ringbuf::from(&file, len_of_ringbuf as usize)?;
 
-        // 5. store the ringbuf to ring_set.
-        self.ringbuf_store.set(id, ringbuf);
+        // 7. store the ringbuf to ringbuf store.
+        self.ringbuf_store.set(client_id, ringbuf);
 
         Ok(())
     }
@@ -149,7 +194,7 @@ async fn accept(listener: &UnixListener) -> Result<UnixStream> {
             }
         }
 
-        time::sleep(Duration::from_secs(backoff)).await;
+        sleep(Duration::from_secs(backoff)).await;
         backoff *= 2;
     }
 }
@@ -182,4 +227,69 @@ pub async fn send_fd(
         .send_fd(file.as_raw_fd())
         .await
         .context(error::IoSnafu)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use tokio::time::sleep;
+    use tokio_util::sync::CancellationToken;
+
+    use crate::{consumer::RingbufStore, fd_pass::FdRecvServer};
+
+    use super::send_fd;
+
+    #[tokio::test]
+    async fn test_fd_pass() {
+        let rb_store =
+            RingbufStore::new(Duration::from_secs(10), Duration::from_secs(5))
+                .await;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("fd.sock");
+
+        let cancel = CancellationToken::new();
+
+        let cancel_c = cancel.clone();
+        let path_c = path.clone();
+        let rb_store_c = rb_store.clone();
+
+        tokio::spawn(async move {
+            let mut server = FdRecvServer::with_shutdown(
+                path_c,
+                rb_store_c,
+                Some(cancel_c.cancelled()),
+            );
+            server.run().await.unwrap();
+        });
+
+        // wait for the server to start.
+        sleep(Duration::from_millis(100)).await;
+
+        // mock concurrent sending
+        let mut joins = Vec::with_capacity(100);
+        for i in 0..100 {
+            let path_c = path.clone();
+            let join = tokio::spawn(async move {
+                let file = tempfile::tempfile().unwrap();
+                let client_id = format!("client_id_{}", i);
+
+                send_fd(path_c, &file, client_id, 1024).await.unwrap();
+            });
+            joins.push(join);
+        }
+
+        for join in joins {
+            join.await.unwrap();
+        }
+
+        // wait for the server to handle the fd.
+        sleep(Duration::from_millis(100)).await;
+
+        for i in 0..100 {
+            let client_id = format!("client_id_{}", i);
+            assert!(rb_store.get(&client_id).is_some());
+        }
+    }
 }

@@ -18,7 +18,7 @@ use tracing::warn;
 use self::decode::Context;
 use self::decode::Decode;
 use self::rings_store::ExpireDashMap;
-use crate::fdpass::FdRecvServer;
+use crate::fd_pass::FdRecvServer;
 use crate::grpc::ShmCtlServer;
 use crate::ringbuf::Ringbuf;
 

@@ -16,7 +16,7 @@ use uuid::Uuid;
 use self::prealloc::PreAlloc;
 use crate::error;
 use crate::error::Result;
-use crate::fdpass::send_fd;
+use crate::fd_pass::send_fd;
 use crate::grpc::GrpcClient;
 use crate::memfd::memfd_create;
 use crate::memfd::MemfdSettings;
@@ -182,6 +182,7 @@ impl RingbufProducer {
     }
 }
 
+// FIXME: wrong stop logical.
 impl Drop for RingbufProducer {
     fn drop(&mut self) {
         self.stop_detect.store(true, Ordering::Relaxed);
