@@ -2,11 +2,11 @@ use std::fs;
 use std::time::Duration;
 
 use shm_ringbuf::consumer::decode::ToStringDecoder;
-use shm_ringbuf::consumer::settings::SettingsBuilder;
+use shm_ringbuf::consumer::settings::SettingsBuilder as ConsumerSettingsBuilder;
 use shm_ringbuf::consumer::RingbufConsumer;
 use shm_ringbuf::error;
 use shm_ringbuf::producer::prealloc::PreAlloc;
-use shm_ringbuf::producer::ProducerSettings;
+use shm_ringbuf::producer::settings::SettingsBuilder as ProducerSettingsBuilder;
 use shm_ringbuf::producer::RingbufProducer;
 use tokio::time::sleep;
 
@@ -17,23 +17,13 @@ async fn test_ringbuf_spsc() {
     let dir = tempfile::tempdir().unwrap();
     let sendfd_sock_path = dir.path().join("sendfd.sock");
 
-    let ringbuf_len = 1024 * 32;
-
-    let settings = SettingsBuilder::default()
-        .fdpass_sock_path(&sendfd_sock_path)
-        .build();
-
+    let settings = ConsumerSettingsBuilder::default().build();
     let mut recv_msgs =
         RingbufConsumer::start_consume(settings, ToStringDecoder).await;
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let settings = ProducerSettings {
-        fdpass_sock_path: sendfd_sock_path.clone(),
-        ringbuf_len,
-        enable_notify: false,
-    };
-
+    let settings = ProducerSettingsBuilder::default().build();
     let producer = RingbufProducer::connect(settings).await.unwrap();
 
     let msg_num = 10000;

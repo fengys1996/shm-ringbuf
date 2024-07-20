@@ -15,12 +15,12 @@ pub struct MemfdSettings<'a> {
     /// The name of the memfd. Only used for debugging.
     pub name: &'a str,
     /// The size of the memfd.
-    pub size: u64,
+    pub len: u64,
 }
 
 /// Create a memfd with the given settings.
 pub fn memfd_create(settings: MemfdSettings) -> Result<fs::File> {
-    let MemfdSettings { name, size } = settings;
+    let MemfdSettings { name, len: size } = settings;
 
     let c_name = CString::new(name.to_string()).context(error::NulZeroSnafu)?;
 
@@ -45,7 +45,7 @@ mod tests {
     fn test_memfd_create() {
         let settings = MemfdSettings {
             name: "memfd",
-            size: 1024,
+            len: 1024,
         };
 
         let file = memfd_create(settings).unwrap();

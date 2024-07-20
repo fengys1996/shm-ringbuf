@@ -1,9 +1,10 @@
 pub mod prealloc;
+pub mod settings;
 
 use std::fs::File;
-use std::path::PathBuf;
 use std::sync::RwLock;
 
+use settings::ProducerSettings;
 use uuid::Uuid;
 
 use self::prealloc::PreAlloc;
@@ -20,20 +21,6 @@ pub struct RingbufProducer {
     ringbuf: RwLock<Ringbuf>,
 }
 
-#[derive(Clone, Debug)]
-pub struct ProducerSettings {
-    /// The path of the unix socket for sending fd.
-    pub fdpass_sock_path: PathBuf,
-
-    /// The len of the ringbuf, unit is byte.
-    pub ringbuf_len: usize,
-
-    /// Whether to enable notification after commtting data.
-    ///
-    /// TODO: Detailed analysis of this option.
-    pub enable_notify: bool,
-}
-
 impl RingbufProducer {
     pub async fn connect(
         settings: ProducerSettings,
@@ -47,7 +34,7 @@ impl RingbufProducer {
         // 2. create a memfd with the given settings.
         let memfd = memfd_create(MemfdSettings {
             name: &client_id,
-            size: ringbuf_len as u64,
+            len: ringbuf_len as u64,
         })?;
 
         // 3. create a ringbuf with the memfd.

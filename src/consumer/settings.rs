@@ -13,6 +13,7 @@ pub struct ConsumerSettings {
     pub(super) ringbuf_check_interval: Duration,
 }
 
+#[derive(Default)]
 pub struct SettingsBuilder {
     fdpass_sock_path: Option<PathBuf>,
     process_duration: Option<Duration>,
@@ -20,20 +21,9 @@ pub struct SettingsBuilder {
     ringbuf_check_interval: Option<Duration>,
 }
 
-impl Default for SettingsBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl SettingsBuilder {
     pub fn new() -> Self {
-        Self {
-            fdpass_sock_path: None,
-            process_duration: None,
-            ringbuf_expire: None,
-            ringbuf_check_interval: None,
-        }
+        SettingsBuilder::default()
     }
 
     /// Set the path of the unix socket for passing file descriptor and other things.

@@ -1,10 +1,8 @@
-use std::path::PathBuf;
-use std::str::FromStr;
 use std::time::Duration;
 
 use shm_ringbuf::error;
 use shm_ringbuf::producer::prealloc::PreAlloc;
-use shm_ringbuf::producer::ProducerSettings;
+use shm_ringbuf::producer::settings::SettingsBuilder;
 use shm_ringbuf::producer::RingbufProducer;
 use tokio::time::sleep;
 use tracing::info;
@@ -13,9 +11,15 @@ use tracing::info;
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let settings = producer_settings();
+    let settings = SettingsBuilder::default()
+        .fdpass_sock_path("/tmp/fd.sock")
+        .ringbuf_len(32 * 1024 * 1024)
+        .enable_notify(false)
+        .build();
+
     let producer = RingbufProducer::connect(settings).await.unwrap();
 
+    let start = std::time::Instant::now();
     for i in 0..10000 {
         let mut pre_alloc =
             reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
@@ -23,27 +27,12 @@ async fn main() {
                 .unwrap();
 
         let write_str = format!("hello, {}", i);
-        info!("write: {}", write_str);
 
         pre_alloc.write(write_str.as_bytes()).unwrap();
 
         pre_alloc.commit();
-
-        if i % 100 == 0 {
-            sleep(Duration::from_millis(10)).await;
-        }
     }
-}
-
-fn producer_settings() -> ProducerSettings {
-    let sendfd_sock_path = PathBuf::from_str("/tmp/fd.sock").unwrap();
-    let size_of_ringbuf = 1024 * 32;
-
-    ProducerSettings {
-        fdpass_sock_path: sendfd_sock_path,
-        ringbuf_len: size_of_ringbuf,
-        enable_notify: false,
-    }
+    info!("consume time: {:?}", start.elapsed());
 }
 
 async fn reserve_with_retry(
