@@ -14,7 +14,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let settings = producer_settings();
-    let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
+    let producer = RingbufProducer::connect(settings).await.unwrap();
 
     for i in 0..10000 {
         let mut pre_alloc =
@@ -24,10 +24,6 @@ async fn main() {
 
         let write_str = format!("hello, {}", i);
         info!("write: {}", write_str);
-
-        wait_consumer_online(&pre_alloc, 20 * 5, Duration::from_secs(3))
-            .await
-            .unwrap();
 
         pre_alloc.write(write_str.as_bytes()).unwrap();
 
@@ -40,16 +36,13 @@ async fn main() {
 }
 
 fn producer_settings() -> ProducerSettings {
-    let control_sock_path = PathBuf::from_str("/tmp/ctl.sock").unwrap();
     let sendfd_sock_path = PathBuf::from_str("/tmp/fd.sock").unwrap();
     let size_of_ringbuf = 1024 * 32;
-    let heartbeat_interval_second = 1;
 
     ProducerSettings {
-        control_sock_path,
-        sendfd_sock_path,
-        size_of_ringbuf,
-        heartbeat_interval_second,
+        fdpass_sock_path: sendfd_sock_path,
+        ringbuf_len: size_of_ringbuf,
+        enable_notify: false,
     }
 }
 
@@ -74,19 +67,4 @@ async fn reserve_with_retry(
     }
 
     Err("reserve failed".to_string())
-}
-
-async fn wait_consumer_online(
-    pre_alloc: &PreAlloc,
-    retry_num: usize,
-    retry_interval: Duration,
-) -> Result<(), String> {
-    for _ in 0..retry_num {
-        if pre_alloc.online() {
-            return Ok(());
-        }
-        sleep(retry_interval).await;
-    }
-
-    Err("wait consumer online timeout".to_string())
 }

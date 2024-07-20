@@ -11,9 +11,9 @@ use crate::error::{self, Result};
 
 /// Settings for creating a memfd.
 #[derive(Debug, Clone)]
-pub struct MemfdSettings {
+pub struct MemfdSettings<'a> {
     /// The name of the memfd. Only used for debugging.
-    pub name: String,
+    pub name: &'a str,
     /// The size of the memfd.
     pub size: u64,
 }
@@ -22,9 +22,8 @@ pub struct MemfdSettings {
 pub fn memfd_create(settings: MemfdSettings) -> Result<fs::File> {
     let MemfdSettings { name, size } = settings;
 
-    let c_name = CString::new(name.clone()).context(error::NulZeroSnafu)?;
-    // TODO: add sealing support. This can prevent some permission issues,
-    // such as a user without write permissions writing to the ringbuf.
+    let c_name = CString::new(name.to_string()).context(error::NulZeroSnafu)?;
+
     let flags = memfd::MemFdCreateFlag::MFD_CLOEXEC;
 
     let owned_fd = memfd::memfd_create(&c_name, flags)
@@ -45,7 +44,7 @@ mod tests {
     #[test]
     fn test_memfd_create() {
         let settings = MemfdSettings {
-            name: "memfd".to_string(),
+            name: "memfd",
             size: 1024,
         };
 

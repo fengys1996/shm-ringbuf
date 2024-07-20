@@ -61,44 +61,6 @@ pub enum Error {
         location: Location,
     },
 
-    #[snafu(display("Tonic error"))]
-    Tonic {
-        source: tonic::Status,
-        #[snafu(implicit)]
-        location: Location,
-    },
-
-    #[snafu(display(
-        "Generic error, status code: {}, msg: {}",
-        status_code,
-        status_msg
-    ))]
-    Generic {
-        status_code: u32,
-        status_msg: String,
-        #[snafu(implicit)]
-        location: Location,
-    },
-
-    #[snafu(display("The corresponding fd was not found"))]
-    NotFoundRingbuf {
-        #[snafu(implicit)]
-        location: Location,
-    },
-
-    #[snafu(display("Server unavailable"))]
-    ServerUnavailable {
-        #[snafu(implicit)]
-        location: Location,
-    },
-
-    #[snafu(display("Failed to serve with incoming"))]
-    ServeWithIncoming {
-        source: tonic::transport::Error,
-        #[snafu(implicit)]
-        location: Location,
-    },
-
     #[snafu(display("Contain an internal 0 byte"))]
     NulZero {
         source: NulError,

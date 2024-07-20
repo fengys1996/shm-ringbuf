@@ -1,25 +1,26 @@
 pub mod decode;
 pub(crate) mod rings_store;
+pub mod settings;
 
 use std::fmt::Debug;
-use std::path::PathBuf;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::time::Duration;
 
+use settings::ConsumerSettings;
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Notify;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
+use tokio_util::sync::WaitForCancellationFuture;
 use tracing::warn;
 
 use self::decode::Context;
 use self::decode::Decode;
 use self::rings_store::ExpireDashMap;
 use crate::fd_pass::FdRecvServer;
-use crate::grpc::ShmCtlServer;
 use crate::ringbuf::Ringbuf;
 
 pub struct RingbufConsumer<D, Item, E> {
@@ -27,18 +28,9 @@ pub struct RingbufConsumer<D, Item, E> {
     sender: Sender<StdResult<Item, E>>,
     decoder: D,
     notify: Arc<Notify>,
-    cancel: CancellationToken,
 }
 
 pub type RingbufStore = ExpireDashMap<Ringbuf>;
-
-pub struct ConsumerSettings {
-    pub control_sock_path: PathBuf,
-    pub sendfd_sock_path: PathBuf,
-    pub process_duration: Duration,
-    pub ringbuf_expire: Duration,
-    pub ringbuf_check_interval: Duration,
-}
 
 impl<D, Item, E> RingbufConsumer<D, Item, E>
 where
@@ -60,51 +52,29 @@ where
 
         let notify = Arc::new(Notify::new());
 
-        let cancel_token = CancellationToken::new();
-
         let consumer = RingbufConsumer {
             ringbuf_store,
             decoder,
             sender: send,
             notify: notify.clone(),
-            cancel: cancel_token.clone(),
         };
 
-        let ringbuf_store = consumer.ringbuf_store.clone();
-        let cancel_token_clone = cancel_token.clone();
-
+        let mut server: FdRecvServer<WaitForCancellationFuture> =
+            FdRecvServer::with_shutdown(
+                settings.fdpass_sock_path,
+                consumer.ringbuf_store.clone(),
+                None,
+            );
         // 1. start the server to receive the fd.
         tokio::spawn(async move {
-            let mut server = FdRecvServer::with_shutdown(
-                settings.sendfd_sock_path,
-                ringbuf_store,
-                Some(cancel_token_clone.cancelled()),
-            );
             server.run().await.unwrap();
         });
 
-        let ringbuf_store = consumer.ringbuf_store.clone();
-        let cancel_token_clone = cancel_token.clone();
-
-        // 2. start the server to receive the control message.
-        tokio::spawn(async move {
-            let mut server = ShmCtlServer::with_shutdown(
-                settings.control_sock_path,
-                notify,
-                ringbuf_store,
-                Some(cancel_token_clone.cancelled()),
-            );
-            server.run().await.unwrap();
-        });
-
-        let process_duration = settings.process_duration;
-        let cancel_token_clone = cancel_token.clone();
+        let process_duration = settings.process_interval;
 
         // 3. start the consumer loop.
         tokio::spawn(async move {
-            consumer
-                .process_loop(process_duration, Some(cancel_token_clone))
-                .await;
+            consumer.process_loop(process_duration, None).await;
         });
 
         recv
@@ -150,7 +120,6 @@ where
             let item = self.decoder.decode(data_block.slice(), Context {});
             if let Err(e) = self.sender.send(item).await {
                 warn!("item recv is dropped, trigger server shutdown, detail: {:?}", e);
-                self.cancel.cancel();
                 break;
             }
             unsafe { ringbuf.advance_consume_offset(data_block.total_len()) }
@@ -159,7 +128,5 @@ where
 }
 
 impl<D, Item, E> Drop for RingbufConsumer<D, Item, E> {
-    fn drop(&mut self) {
-        self.cancel.cancel();
-    }
+    fn drop(&mut self) {}
 }

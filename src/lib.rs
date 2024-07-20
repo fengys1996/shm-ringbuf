@@ -4,7 +4,6 @@ pub mod producer;
 
 mod data_block;
 mod fd_pass;
-mod grpc;
 mod memfd;
 mod ringbuf;
 
