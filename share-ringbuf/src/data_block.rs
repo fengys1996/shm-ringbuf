@@ -76,6 +76,10 @@ impl<T> DataBlock<T> {
     pub fn commit(&self) {
         self.header.set_busy(false);
     }
+
+    pub fn is_busy(&self) -> bool {
+        self.header.busy()
+    }
 }
 
 impl<T> DataBlock<T> {
@@ -143,10 +147,6 @@ impl<T> DataBlock<T> {
 
     fn written_len(&self) -> u32 {
         self.header.written_len()
-    }
-
-    pub(crate) fn is_busy(&self) -> bool {
-        self.header.busy()
     }
 }
 
@@ -265,12 +265,12 @@ mod tests {
 
         assert_eq!(header.capacity(), 1024);
         assert_eq!(header.written_len(), 512);
-        assert_eq!(header.busy(), true);
+        assert!(header.busy());
 
         header.advance_len(125);
         assert_eq!(header.capacity(), 1024);
         assert_eq!(header.written_len(), 512 + 125);
-        assert_eq!(header.busy(), true);
+        assert!(header.busy());
     }
 
     #[test]
