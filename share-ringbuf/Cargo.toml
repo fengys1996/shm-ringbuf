@@ -1,14 +1,7 @@
-[workspace]
-members = ["share-ringbuf"]
-
 [package]
-name = "shm-ringbuf"
+name = "share-ringbuf"
 version = "0.1.0"
 edition = "2021"
-license = "Apache-2.0"
-
-[features]
-benchmark = []
 
 [dependencies]
 async-trait = { version = "0.1" }
@@ -24,18 +17,3 @@ tokio-util = { version = "0.7" }
 tonic = { version = "0.11" }
 tower = { version = "0.4" }
 tracing = { version = "0.1" }
-
-[dev-dependencies]
-criterion = { version = "0.5" }
-tempfile = { version = "3.2" }
-tracing-subscriber = { version = "0.3" }
-
-[build-dependencies]
-tonic-build = "0.11"
-
-[[bench]]
-name = "ringbuf"
-harness = false
-
-[profile.release]
-debug = 1

@@ -9,7 +9,6 @@ use std::time::Duration;
 
 use passfd::tokio::FdPassingExt;
 use snafu::location;
-use snafu::Location;
 use snafu::ResultExt;
 use tokio::fs::remove_file;
 use tokio::io::AsyncReadExt;

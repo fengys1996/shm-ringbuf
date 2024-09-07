@@ -23,7 +23,6 @@ use crate::error::Result;
 /// | 16 bytes          | *header.capacity_ptr bytes                    |
 /// +-------------------+-----------------------------------------------+
 /// ```
-
 pub struct DataBlock<T> {
     data_ptr: *mut u8,
     header: Header,
