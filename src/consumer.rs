@@ -1,12 +1,13 @@
 pub mod decode;
 pub(crate) mod rings_store;
+pub mod settings;
 
 use std::fmt::Debug;
-use std::path::PathBuf;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::time::Duration;
 
+use settings::ConsumerSettings;
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
@@ -31,14 +32,6 @@ pub struct RingbufConsumer<D, Item, E> {
 }
 
 pub type RingbufStore = ExpireDashMap<Ringbuf>;
-
-pub struct ConsumerSettings {
-    pub control_sock_path: PathBuf,
-    pub sendfd_sock_path: PathBuf,
-    pub process_duration: Duration,
-    pub ringbuf_expire: Duration,
-    pub ringbuf_check_interval: Duration,
-}
 
 impl<D, Item, E> RingbufConsumer<D, Item, E>
 where
@@ -76,7 +69,7 @@ where
         // 1. start the server to receive the fd.
         tokio::spawn(async move {
             let mut server = FdRecvServer::with_shutdown(
-                settings.sendfd_sock_path,
+                settings.fdpass_sock_path,
                 ringbuf_store,
                 Some(cancel_token_clone.cancelled()),
             );
@@ -89,7 +82,7 @@ where
         // 2. start the server to receive the control message.
         tokio::spawn(async move {
             let mut server = ShmCtlServer::with_shutdown(
-                settings.control_sock_path,
+                settings.grpc_sock_path,
                 notify,
                 ringbuf_store,
                 Some(cancel_token_clone.cancelled()),
@@ -97,7 +90,7 @@ where
             server.run().await.unwrap();
         });
 
-        let process_duration = settings.process_duration;
+        let process_duration = settings.process_interval;
         let cancel_token_clone = cancel_token.clone();
 
         // 3. start the consumer loop.
@@ -143,11 +136,12 @@ where
 
     async fn process_ringbuf(&self, ringbuf: &mut Ringbuf) {
         while let Some(data_block) = ringbuf.peek() {
-            if data_block.atomic_is_busy() {
+            if data_block.is_busy() {
                 break;
             }
 
-            let item = self.decoder.decode(data_block.slice(), Context {});
+            let item =
+                self.decoder.decode(data_block.slice().unwrap(), Context {});
             if let Err(e) = self.sender.send(item).await {
                 warn!("item recv is dropped, trigger server shutdown, detail: {:?}", e);
                 self.cancel.cancel();

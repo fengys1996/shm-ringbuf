@@ -21,7 +21,7 @@ pub struct PreAlloc {
 impl PreAlloc {
     /// Get the slice of the pre-allocated.
     pub fn slice(&self) -> &[u8] {
-        self.inner.slice()
+        self.inner.slice().unwrap()
     }
 
     /// Write data to the pre-allocated.

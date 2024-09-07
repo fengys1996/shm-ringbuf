@@ -1,4 +1,5 @@
 use std::ffi::NulError;
+use std::num::TryFromIntError;
 
 use snafu::Location;
 use snafu::Snafu;
@@ -102,6 +103,15 @@ pub enum Error {
     #[snafu(display("Contain an internal 0 byte"))]
     NulZero {
         source: NulError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("Failed to convert int, from {} to {}", from, to))]
+    TryFromInt {
+        from: String,
+        to: String,
+        source: TryFromIntError,
         #[snafu(implicit)]
         location: Location,
     },

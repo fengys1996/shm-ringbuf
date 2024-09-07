@@ -23,8 +23,7 @@ pub fn memfd_create(settings: MemfdSettings) -> Result<fs::File> {
     let MemfdSettings { name, size } = settings;
 
     let c_name = CString::new(name.clone()).context(error::NulZeroSnafu)?;
-    // TODO: add sealing support. This can prevent some permission issues,
-    // such as a user without write permissions writing to the ringbuf.
+
     let flags = memfd::MemFdCreateFlag::MFD_CLOEXEC;
 
     let owned_fd = memfd::memfd_create(&c_name, flags)

@@ -1,5 +1,3 @@
-pub mod metadata;
-
 use std::ffi::c_void;
 use std::fs;
 use std::num::NonZeroUsize;
@@ -17,12 +15,12 @@ use snafu::ResultExt;
 use tracing::error;
 use tracing::info;
 
-use self::metadata::RingbufMetadata;
 use crate::data_block::DataBlock;
 use crate::data_block::HEADER_LEN;
 use crate::error;
 use crate::error::Result;
 
+// Unit is byte.
 pub(crate) const METADATA_LEN: usize = 4 * 4;
 
 /// The version of the ring buffer.
@@ -43,24 +41,26 @@ pub(crate) const VERSION: u32 = 1;
 ///
 /// The underlying memory is divided into two parts: metadata and data part.
 ///
-/// The metadata is used to store the information of the data part, include the produce offset and
-/// consume offset. The len of Metadata is align(METADATA_LEN, page_size).
+/// The metadata is used to store the information of the data part, include the
+/// produce offset and consume offset. The len of Metadata is align(METADATA_LEN
+/// , page_size).
 ///
-/// The data part is used to store the data, which organized as a ring buffer. Note: data part 0
-/// and data part 1 are mapped to the same physical memory.
+/// The data part is used to store the data, which organized as a ring buffer.
+/// Note: data part 0 and data part 1 are mapped to the same physical memory.
 #[derive(Clone)]
 pub struct Ringbuf {
     /// The raw pointer to the data part.
     data_part_ptr: *mut u8,
 
-    /// The length of the data part in ringbuf, include data part 0 and data part 1.
+    /// The length of the data part in ringbuf, include data part 0 and data
+    /// part 1.
     data_part_len: usize,
 
     /// The metadata of the ring buffer.
     metadata: RingbufMetadata,
 
-    /// The drop guard of the ring buffer, which is used to munmap when all [Ringbuf] and
-    /// releated [DataBlock] is dropped.
+    /// The drop guard of the ring buffer, which is used to munmap when all
+    /// [Ringbuf] and releated [DataBlock] is dropped.
     drop_guard: Arc<DropGuard>,
 }
 
@@ -375,6 +375,45 @@ fn page_align_size(size: usize) -> usize {
 
 fn sys_page_size() -> usize {
     unsafe { nix::libc::sysconf(_SC_PAGESIZE) as usize }
+}
+
+/// The metadata of ring buffer.
+///
+/// ## The underlying structure
+///
+/// ```text
+/// metadata.produce_offset metadata.consume_offset
+///     |                   |
+///     v                   v
+///     +-------------------+-------------------+-------------------+
+///     | produce_offset    | consume_offset    | reserved          |
+///     +-------------------+-------------------+-------------------+
+///     | 4 bytes           | 4 bytes           | n bytes           |
+///     +-------------------+-------------------+-------------------+
+/// ```
+#[derive(Copy, Clone, Debug)]
+pub struct RingbufMetadata {
+    /// The raw pointer to produce_offset which is the next write position in ringbuf.
+    pub(super) produce_offset_ptr: *mut u32,
+
+    /// The raw pointer to consume_offset which is the next read position in ringbuf.
+    pub(super) consume_offset_ptr: *mut u32,
+}
+
+impl RingbufMetadata {
+    /// Create a new instance of `RingbufMetadata`.
+    ///
+    /// # Safety
+    /// The `metadata_ptr` must be a valid pointer to the metadata of ring buffer.
+    pub unsafe fn new(metadata_ptr: *mut u8) -> Self {
+        let produce_offset_ptr = metadata_ptr as *mut u32;
+        let consume_offset_ptr = unsafe { produce_offset_ptr.add(1) };
+
+        Self {
+            produce_offset_ptr,
+            consume_offset_ptr,
+        }
+    }
 }
 
 #[cfg(test)]

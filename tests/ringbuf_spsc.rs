@@ -2,7 +2,7 @@ use std::fs;
 use std::time::Duration;
 
 use shm_ringbuf::consumer::decode::ToStringDecoder;
-use shm_ringbuf::consumer::ConsumerSettings;
+use shm_ringbuf::consumer::settings::SettingsBuilder;
 use shm_ringbuf::consumer::RingbufConsumer;
 use shm_ringbuf::error;
 use shm_ringbuf::producer::prealloc::PreAlloc;
@@ -15,25 +15,25 @@ async fn test_ringbuf_spsc() {
     tracing_subscriber::fmt::init();
 
     let dir = tempfile::tempdir().unwrap();
-    let control_sock_path = dir.path().join("control.sock");
-    let sendfd_sock_path = dir.path().join("sendfd.sock");
+    let grpc_sock_path = dir.path().join("control.sock");
+    let fdpass_sock_path = dir.path().join("sendfd.sock");
 
     let size_of_ringbuf = 1024 * 32;
 
-    let settings = ConsumerSettings {
-        control_sock_path: control_sock_path.clone(),
-        sendfd_sock_path: sendfd_sock_path.clone(),
-        process_duration: Duration::from_millis(10),
-        ringbuf_expire: Duration::from_secs(10),
-        ringbuf_check_interval: Duration::from_secs(3),
-    };
+    let settings = SettingsBuilder::new()
+        .grpc_sock_path(grpc_sock_path.clone())
+        .fdpass_sock_path(fdpass_sock_path.clone())
+        .process_interval(Duration::from_millis(10))
+        .ringbuf_expire(Duration::from_secs(10))
+        .ringbuf_expire_check_interval(Duration::from_secs(3))
+        .build();
 
     let mut recv_msgs =
         RingbufConsumer::start_consume(settings, ToStringDecoder).await;
 
     let settings = ProducerSettings {
-        control_sock_path: control_sock_path.clone(),
-        sendfd_sock_path: sendfd_sock_path.clone(),
+        control_sock_path: grpc_sock_path.clone(),
+        sendfd_sock_path: fdpass_sock_path.clone(),
         size_of_ringbuf,
         heartbeat_interval_second: 1,
     };
@@ -65,8 +65,8 @@ async fn test_ringbuf_spsc() {
         assert_eq!(item.unwrap(), format!("hello, {}", i));
     }
 
-    let _ = fs::remove_file(control_sock_path);
-    let _ = fs::remove_file(sendfd_sock_path);
+    let _ = fs::remove_file(grpc_sock_path);
+    let _ = fs::remove_file(fdpass_sock_path);
 }
 
 async fn reserve_with_retry(

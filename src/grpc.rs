@@ -2,6 +2,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use hyper_util::rt::TokioIo;
 use snafu::ResultExt;
 use tokio::net::UnixListener;
 use tokio::net::UnixStream;
@@ -43,15 +44,22 @@ impl GrpcClient {
         sock_path: impl Into<PathBuf>,
     ) -> GrpcClient {
         let sock_path = sock_path.into();
+
+        let connector = service_fn(move |_: Uri| {
+            let sock_path = sock_path.clone();
+            async move {
+                Ok::<_, std::io::Error>(TokioIo::new(
+                    UnixStream::connect(&sock_path).await?,
+                ))
+            }
+        });
+
         // We will ignore this uri because uds do not use it
         // if your connector does use the uri it will be provided
         // as the request to the `MakeConnection`.
         let channel = Endpoint::try_from("http://[::]:50051")
-            // Unwrap safety: the uri is valid.
             .unwrap()
-            .connect_with_connector_lazy(service_fn(move |_: Uri| {
-                UnixStream::connect(sock_path.clone())
-            }));
+            .connect_with_connector_lazy(connector);
 
         GrpcClient {
             producer_id,

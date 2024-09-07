@@ -11,6 +11,7 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() {
+    // 1. Initialize log.
     tracing_subscriber::fmt::init();
 
     let settings = producer_settings();
