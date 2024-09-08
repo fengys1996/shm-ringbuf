@@ -1,5 +1,6 @@
 pub mod decode;
 pub(crate) mod rings_store;
+mod session_manager;
 pub mod settings;
 
 use std::fmt::Debug;
