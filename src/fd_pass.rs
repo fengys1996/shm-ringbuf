@@ -10,7 +10,7 @@ use std::time::Duration;
 use passfd::tokio::FdPassingExt;
 use snafu::location;
 use snafu::ResultExt;
-use tokio::fs::remove_file;
+use tokio::fs;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::UnixListener;
@@ -76,10 +76,21 @@ where
 
     /// Run the FdRecvServer.
     pub async fn run(&mut self) -> Result<()> {
-        if self.sock_path.metadata().is_ok() {
-            remove_file(&self.sock_path).await.context(error::IoSnafu)?;
+        if let Some(parent) = self.sock_path.parent() {
+            fs::create_dir_all(parent).await.context(error::IoSnafu)?;
 
-            info!("remove the unix socket file: {:?}", self.sock_path);
+            warn!(
+                "create the parent directory for the unix socket file: {:?}",
+                parent
+            );
+        }
+
+        if self.sock_path.metadata().is_ok() {
+            fs::remove_file(&self.sock_path)
+                .await
+                .context(error::IoSnafu)?;
+
+            warn!("remove the unix socket file: {:?}", self.sock_path);
         }
 
         let listener =
