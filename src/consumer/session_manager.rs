@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use moka::sync::Cache;
 use moka::sync::CacheBuilder;
+use tracing::info;
 
 use crate::ringbuf::Ringbuf;
 
@@ -29,7 +30,15 @@ where
 {
     /// Create a new session manager.
     pub fn new(max_capacity: u64, tti: Duration) -> Self {
-        let cache = CacheBuilder::new(max_capacity).time_to_idle(tti).build();
+        let cache = CacheBuilder::new(max_capacity)
+            .time_to_idle(tti)
+            .eviction_listener(|k, _v, cause| {
+                info!(
+                    "A session was evicted, client id: {}, cause: {:?}",
+                    k, cause
+                );
+            })
+            .build();
         Self { sessions: cache }
     }
 
