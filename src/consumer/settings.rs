@@ -13,6 +13,8 @@ pub struct ConsumerSettings {
     pub(super) process_interval: Duration,
     pub(super) ringbuf_expire: Duration,
     pub(super) ringbuf_check_interval: Duration,
+    pub(super) max_session_capacity: u64,
+    pub(super) session_tti: Duration,
 }
 
 #[derive(Default)]
@@ -22,6 +24,8 @@ pub struct SettingsBuilder {
     process_duration: Option<Duration>,
     ringbuf_expire: Option<Duration>,
     ringbuf_check_interval: Option<Duration>,
+    max_session_capacity: Option<u64>,
+    session_tti: Option<Duration>,
 }
 
 impl SettingsBuilder {
@@ -58,6 +62,16 @@ impl SettingsBuilder {
         self
     }
 
+    pub fn max_session_capacity(mut self, capacity: u64) -> Self {
+        self.max_session_capacity = Some(capacity);
+        self
+    }
+
+    pub fn session_ttl(mut self, ttl: Duration) -> Self {
+        self.session_tti = Some(ttl);
+        self
+    }
+
     pub fn build(self) -> ConsumerSettings {
         let grpc_sock_path =
             self.grpc_sock_path.unwrap_or(DEFAULT_GRPC_SOCK_PATH.into());
@@ -76,12 +90,18 @@ impl SettingsBuilder {
             .ringbuf_check_interval
             .unwrap_or(DEFAULT_RINGBUF_CHECK_INTERVAL);
 
+        let max_session_capacity = self.max_session_capacity.unwrap_or(10);
+
+        let session_ttl = self.session_tti.unwrap_or(Duration::from_secs(10));
+
         ConsumerSettings {
             grpc_sock_path,
             fdpass_sock_path,
             process_interval: process_duration,
             ringbuf_expire,
             ringbuf_check_interval,
+            max_session_capacity,
+            session_tti: session_ttl,
         }
     }
 }
@@ -108,6 +128,8 @@ mod tests {
             process_interval: process_duration,
             ringbuf_expire,
             ringbuf_check_interval,
+            max_session_capacity,
+            session_tti,
         } = settings;
 
         assert_eq!(grpc_sock_path.as_os_str(), DEFAULT_GRPC_SOCK_PATH);
@@ -115,6 +137,8 @@ mod tests {
         assert_eq!(process_duration, DEFAULT_PROCESS_DURATION);
         assert_eq!(ringbuf_expire, DEFAULT_RINGBUF_EXPIRE);
         assert_eq!(ringbuf_check_interval, DEFAULT_RINGBUF_CHECK_INTERVAL);
+        assert_eq!(max_session_capacity, 10);
+        assert_eq!(session_tti, Duration::from_secs(10));
     }
 
     #[test]
@@ -125,6 +149,8 @@ mod tests {
             .process_interval(Duration::from_millis(100))
             .ringbuf_expire(Duration::from_secs(20))
             .ringbuf_expire_check_interval(Duration::from_secs(6))
+            .max_session_capacity(20)
+            .session_ttl(Duration::from_secs(30))
             .build();
 
         let ConsumerSettings {
@@ -133,6 +159,8 @@ mod tests {
             process_interval: process_duration,
             ringbuf_expire,
             ringbuf_check_interval,
+            max_session_capacity,
+            session_tti,
         } = settings;
 
         assert_eq!(grpc_sock_path.as_os_str(), "/tmp/grpc_test.sock");
@@ -140,5 +168,7 @@ mod tests {
         assert_eq!(process_duration, Duration::from_millis(100));
         assert_eq!(ringbuf_expire, Duration::from_secs(20));
         assert_eq!(ringbuf_check_interval, Duration::from_secs(6));
+        assert_eq!(max_session_capacity, 20);
+        assert_eq!(session_tti, Duration::from_secs(30));
     }
 }

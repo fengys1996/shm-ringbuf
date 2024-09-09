@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub mod consumer;
 pub mod error;
 pub mod producer;

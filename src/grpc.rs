@@ -23,7 +23,7 @@ use self::proto::shm_control_server::ShmControlServer;
 use self::proto::HandShakeRequest;
 use self::proto::NotifyRequest;
 use self::proto::PingRequest;
-use crate::consumer::RingbufStore;
+use crate::consumer::session_manager::SessionManagerRef;
 use crate::error;
 use crate::error::Result;
 use crate::ringbuf::VERSION;
@@ -159,7 +159,7 @@ impl TryFrom<u32> for StatusCode {
 pub struct ShmCtlServer<F> {
     sock_path: PathBuf,
     notify: Arc<Notify>,
-    ringbuf_store: RingbufStore,
+    session_manager: SessionManagerRef,
     shutdown: Option<F>,
 }
 
@@ -170,13 +170,13 @@ where
     pub fn with_shutdown(
         sock_path: impl Into<PathBuf>,
         notify: Arc<Notify>,
-        ringbuf_store: RingbufStore,
+        session_manager: SessionManagerRef,
         shutdown: Option<F>,
     ) -> Self {
         ShmCtlServer {
             sock_path: sock_path.into(),
             notify,
-            ringbuf_store,
+            session_manager,
             shutdown,
         }
     }
@@ -188,7 +188,7 @@ where
 
         let handler = ShmCtlHandler {
             notify: self.notify.clone(),
-            ringbuf_store: self.ringbuf_store.clone(),
+            session_manager: self.session_manager.clone(),
         };
         let shm_ctl = ShmControlServer::new(handler);
 
@@ -210,7 +210,7 @@ where
 
 struct ShmCtlHandler {
     notify: Arc<Notify>,
-    ringbuf_store: RingbufStore,
+    session_manager: SessionManagerRef,
 }
 
 #[async_trait::async_trait]
@@ -276,7 +276,7 @@ impl ShmControl for ShmCtlHandler {
     {
         let PingRequest { producer_id } = request.into_inner();
 
-        if self.ringbuf_store.get(producer_id).is_none() {
+        if self.session_manager.get(&producer_id).is_none() {
             let resp = proto::PingResponse {
                 status_code: StatusCode::MissingFD as u32,
                 status_message: "The corresponding ringbuf was not found"

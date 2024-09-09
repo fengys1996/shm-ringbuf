@@ -5,6 +5,7 @@ use std::os::fd::FromRawFd;
 use std::path::Path;
 use std::path::PathBuf;
 use std::pin::pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 use passfd::tokio::FdPassingExt;
@@ -20,7 +21,8 @@ use tracing::error;
 use tracing::info;
 use tracing::warn;
 
-use crate::consumer::RingbufStore;
+use crate::consumer::session_manager::Session;
+use crate::consumer::session_manager::SessionManagerRef;
 use crate::error;
 use crate::error::Result;
 use crate::ringbuf::Ringbuf;
@@ -31,8 +33,7 @@ pub struct FdRecvServer<F> {
     /// The unix sock path for receiving fd.
     sock_path: PathBuf,
 
-    /// The store is used to manage the Ringbuf.
-    ringbuf_store: RingbufStore,
+    session_manager: SessionManagerRef,
 
     /// The future for shutdown the server gracefully.
     shutdown: Option<F>,
@@ -64,12 +65,12 @@ where
     /// Create a new FdRecvServer.
     pub fn with_shutdown(
         sock_path: impl Into<PathBuf>,
-        ringbuf_store: RingbufStore,
+        session_manager: SessionManagerRef,
         shutdown: Option<F>,
     ) -> Self {
         FdRecvServer {
             sock_path: sock_path.into(),
-            ringbuf_store,
+            session_manager,
             shutdown,
         }
     }
@@ -124,7 +125,7 @@ where
 
         let mut handler = Handler {
             stream,
-            ringbuf_store: self.ringbuf_store.clone(),
+            session_manager: self.session_manager.clone(),
         };
 
         tokio::spawn(async move {
@@ -139,7 +140,7 @@ where
 
 struct Handler {
     stream: UnixStream,
-    ringbuf_store: RingbufStore,
+    session_manager: SessionManagerRef,
 }
 
 impl Handler {
@@ -173,7 +174,8 @@ impl Handler {
         let ringbuf = Ringbuf::from(&file, len_of_ringbuf as usize)?;
 
         // 7. Store the ringbuf to ringbuf store.
-        self.ringbuf_store.set(client_id, ringbuf);
+        let session = Arc::new(Session::new(ringbuf));
+        self.session_manager.insert(client_id, session);
 
         Ok(())
     }
@@ -241,20 +243,21 @@ pub async fn send_fd(
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{sync::Arc, time::Duration};
 
     use tokio::time::sleep;
     use tokio_util::sync::CancellationToken;
 
-    use crate::{consumer::RingbufStore, fd_pass::FdRecvServer};
+    use crate::{
+        consumer::session_manager::SessionManager, fd_pass::FdRecvServer,
+    };
 
     use super::send_fd;
 
     #[tokio::test]
     async fn test_fd_pass() {
-        let rb_store =
-            RingbufStore::new(Duration::from_secs(10), Duration::from_secs(5))
-                .await;
+        let session_manager =
+            Arc::new(SessionManager::new(200, Duration::from_secs(10)));
 
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("fd.sock");
@@ -263,12 +266,12 @@ mod tests {
 
         let cancel_c = cancel.clone();
         let path_c = path.clone();
-        let rb_store_c = rb_store.clone();
+        let session_manager_c = session_manager.clone();
 
         tokio::spawn(async move {
             let mut server = FdRecvServer::with_shutdown(
                 path_c,
-                rb_store_c,
+                session_manager_c,
                 Some(cancel_c.cancelled()),
             );
             server.run().await.unwrap();
@@ -299,7 +302,7 @@ mod tests {
 
         for i in 0..100 {
             let client_id = format!("client_id_{}", i);
-            assert!(rb_store.get(&client_id).is_some());
+            assert!(session_manager.get(&client_id).is_some());
         }
 
         cancel.cancel();

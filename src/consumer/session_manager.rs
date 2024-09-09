@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,13 +14,25 @@ pub struct Session {
 }
 pub type SessionRef = Arc<Session>;
 
+impl Session {
+    /// Create a new session.
+    pub fn new(ringbuf: Ringbuf) -> Self {
+        Self { ringbuf }
+    }
+
+    /// Get the ringbuf of the session.
+    pub fn ringbuf(&self) -> &Ringbuf {
+        &self.ringbuf
+    }
+}
+
 pub type ClientId = String;
 pub type ClientIdRef = Arc<String>;
 
 pub struct SessionManager<S> {
     sessions: Cache<ClientId, S>,
 }
-pub type SessionManagerRef = Arc<SessionManager<Session>>;
+pub type SessionManagerRef = Arc<SessionManager<SessionRef>>;
 
 impl<S> SessionManager<S>
 where
