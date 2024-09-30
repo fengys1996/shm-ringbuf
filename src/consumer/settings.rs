@@ -33,6 +33,7 @@ impl ConsumerSettingsBuilder {
         ConsumerSettingsBuilder::default()
     }
 
+    /// Set the path of the unix socket for gRPC communication.
     pub fn grpc_sock_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.grpc_sock_path = Some(path.into());
         self

@@ -12,7 +12,13 @@ async fn main() {
     // 1. Initialize log.
     tracing_subscriber::fmt::init();
 
-    let settings = ProducerSettingsBuilder::new().build();
+    let settings = ProducerSettingsBuilder::new()
+        .grpc_sock_path("/tmp/ctl.sock")
+        .fdpass_sock_path("/tmp/fd.sock")
+        .ringbuf_len(1024 * 1024)
+        .heartbeat_interval(Duration::from_secs(1))
+        .build();
+
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
     for i in 0..10000 {
