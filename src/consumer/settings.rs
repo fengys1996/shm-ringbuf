@@ -18,7 +18,7 @@ pub struct ConsumerSettings {
 }
 
 #[derive(Default)]
-pub struct SettingsBuilder {
+pub struct ConsumerSettingsBuilder {
     grpc_sock_path: Option<PathBuf>,
     fdpass_sock_path: Option<PathBuf>,
     process_duration: Option<Duration>,
@@ -28,17 +28,19 @@ pub struct SettingsBuilder {
     session_tti: Option<Duration>,
 }
 
-impl SettingsBuilder {
+impl ConsumerSettingsBuilder {
     pub fn new() -> Self {
-        SettingsBuilder::default()
+        ConsumerSettingsBuilder::default()
     }
 
+    /// Set the path of the unix socket for gRPC communication.
     pub fn grpc_sock_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.grpc_sock_path = Some(path.into());
         self
     }
 
-    /// Set the path of the unix socket for passing file descriptor and other things.
+    /// Set the path of the unix socket for passing file descriptor and other
+    /// information.
     pub fn fdpass_sock_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.fdpass_sock_path = Some(path.into());
         self
@@ -116,11 +118,11 @@ mod tests {
         DEFAULT_RINGBUF_EXPIRE,
     };
 
-    use super::{ConsumerSettings, SettingsBuilder};
+    use super::{ConsumerSettings, ConsumerSettingsBuilder};
 
     #[test]
     fn test_settings_default() {
-        let settings = SettingsBuilder::new().build();
+        let settings = ConsumerSettingsBuilder::new().build();
 
         let ConsumerSettings {
             grpc_sock_path,
@@ -143,7 +145,7 @@ mod tests {
 
     #[test]
     fn test_settings() {
-        let settings = SettingsBuilder::new()
+        let settings = ConsumerSettingsBuilder::new()
             .grpc_sock_path("/tmp/grpc_test.sock")
             .fdpass_sock_path("/tmp/fd_test.sock")
             .process_interval(Duration::from_millis(100))
