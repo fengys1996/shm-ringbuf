@@ -2,11 +2,11 @@ use std::fs;
 use std::time::Duration;
 
 use shm_ringbuf::consumer::decode::ToStringDecoder;
-use shm_ringbuf::consumer::settings::SettingsBuilder;
+use shm_ringbuf::consumer::settings::ConsumerSettingsBuilder;
 use shm_ringbuf::consumer::RingbufConsumer;
 use shm_ringbuf::error;
 use shm_ringbuf::producer::prealloc::PreAlloc;
-use shm_ringbuf::producer::ProducerSettings;
+use shm_ringbuf::producer::settings::ProducerSettingsBuilder;
 use shm_ringbuf::producer::RingbufProducer;
 use tokio::time::sleep;
 
@@ -18,9 +18,7 @@ async fn test_ringbuf_spsc() {
     let grpc_sock_path = dir.path().join("control.sock");
     let fdpass_sock_path = dir.path().join("sendfd.sock");
 
-    let size_of_ringbuf = 1024 * 32;
-
-    let settings = SettingsBuilder::new()
+    let settings = ConsumerSettingsBuilder::new()
         .grpc_sock_path(grpc_sock_path.clone())
         .fdpass_sock_path(fdpass_sock_path.clone())
         .process_interval(Duration::from_millis(10))
@@ -31,13 +29,10 @@ async fn test_ringbuf_spsc() {
     let mut recv_msgs =
         RingbufConsumer::start_consume(settings, ToStringDecoder).await;
 
-    let settings = ProducerSettings {
-        control_sock_path: grpc_sock_path.clone(),
-        sendfd_sock_path: fdpass_sock_path.clone(),
-        size_of_ringbuf,
-        heartbeat_interval_second: 1,
-    };
-
+    let settings = ProducerSettingsBuilder::new()
+        .grpc_sock_path(grpc_sock_path.clone())
+        .fdpass_sock_path(fdpass_sock_path.clone())
+        .build();
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
     let msg_num = 10000;

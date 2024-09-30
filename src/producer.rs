@@ -1,13 +1,13 @@
 pub mod prealloc;
+pub mod settings;
 
 use std::fs::File;
-use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::time::Duration;
 
+use settings::ProducerSettings;
 use tracing::error;
 use tracing::info;
 use tracing::warn;
@@ -33,37 +33,28 @@ pub struct RingbufProducer {
     stop_detect: Arc<AtomicBool>,
 }
 
-#[derive(Clone)]
-pub struct ProducerSettings {
-    pub control_sock_path: PathBuf,
-    pub sendfd_sock_path: PathBuf,
-    pub size_of_ringbuf: usize,
-    pub heartbeat_interval_second: u64,
-}
-
 impl RingbufProducer {
     pub async fn connect_lazy(
         settings: ProducerSettings,
     ) -> Result<RingbufProducer> {
         let ProducerSettings {
-            control_sock_path,
-            size_of_ringbuf,
+            grpc_sock_path,
+            ringbuf_len,
             ..
         } = &settings;
 
         let client_id = gen_client_id();
 
-        let size_of_ringbuf = *size_of_ringbuf;
+        let ringbuf_len = *ringbuf_len;
         let memfd = memfd_create(MemfdSettings {
             name: client_id.clone(),
-            size: size_of_ringbuf as u64 * 2,
+            size: ringbuf_len as u64,
         })?;
 
         let grpc_client =
-            Arc::new(GrpcClient::new(client_id.clone(), control_sock_path));
+            Arc::new(GrpcClient::new(client_id.clone(), grpc_sock_path));
 
-        let ringbuf =
-            Arc::new(RwLock::new(Ringbuf::new(&memfd, size_of_ringbuf)?));
+        let ringbuf = Arc::new(RwLock::new(Ringbuf::new(&memfd, ringbuf_len)?));
 
         let online = Arc::new(AtomicBool::new(false));
 
@@ -105,7 +96,7 @@ impl RingbufProducer {
 
 impl RingbufProducer {
     async fn loop_detect(&self) {
-        let heartbeat_interval_second = self.settings.heartbeat_interval_second;
+        let heartbeat_interval = self.settings.heartbeat_interval;
 
         let mut quick_detect = false;
         loop {
@@ -114,8 +105,7 @@ impl RingbufProducer {
             }
 
             if !quick_detect {
-                let sleep_time = Duration::from_secs(heartbeat_interval_second);
-                tokio::time::sleep(sleep_time).await;
+                tokio::time::sleep(heartbeat_interval).await;
             }
 
             quick_detect = self.detect().await;
@@ -169,10 +159,10 @@ impl RingbufProducer {
 
     async fn send_fd(&self) -> Result<()> {
         send_fd(
-            &self.settings.sendfd_sock_path,
+            &self.settings.fdpass_sock_path,
             &self.memfd,
             self.client_id.clone(),
-            self.settings.size_of_ringbuf as u32,
+            self.settings.ringbuf_len as u32,
         )
         .await
     }

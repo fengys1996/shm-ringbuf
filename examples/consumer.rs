@@ -3,7 +3,9 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use shm_ringbuf::consumer::decode::ToStringDecoder;
-use shm_ringbuf::consumer::settings::{ConsumerSettings, SettingsBuilder};
+use shm_ringbuf::consumer::settings::{
+    ConsumerSettings, ConsumerSettingsBuilder,
+};
 use shm_ringbuf::consumer::RingbufConsumer;
 use tracing::info;
 
@@ -25,7 +27,7 @@ fn consumer_settings() -> ConsumerSettings {
     let fdpass_sock_path = PathBuf::from_str("/tmp/fd.sock").unwrap();
     let process_interval = Duration::from_millis(10);
 
-    SettingsBuilder::new()
+    ConsumerSettingsBuilder::new()
         .grpc_sock_path(grpc_sock_path)
         .fdpass_sock_path(fdpass_sock_path)
         .process_interval(process_interval)

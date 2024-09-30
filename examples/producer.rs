@@ -1,10 +1,8 @@
-use std::path::PathBuf;
-use std::str::FromStr;
 use std::time::Duration;
 
 use shm_ringbuf::error;
 use shm_ringbuf::producer::prealloc::PreAlloc;
-use shm_ringbuf::producer::ProducerSettings;
+use shm_ringbuf::producer::settings::ProducerSettingsBuilder;
 use shm_ringbuf::producer::RingbufProducer;
 use tokio::time::sleep;
 use tracing::info;
@@ -14,7 +12,7 @@ async fn main() {
     // 1. Initialize log.
     tracing_subscriber::fmt::init();
 
-    let settings = producer_settings();
+    let settings = ProducerSettingsBuilder::new().build();
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
     for i in 0..10000 {
@@ -37,20 +35,6 @@ async fn main() {
         if i % 100 == 0 {
             sleep(Duration::from_millis(10)).await;
         }
-    }
-}
-
-fn producer_settings() -> ProducerSettings {
-    let control_sock_path = PathBuf::from_str("/tmp/ctl.sock").unwrap();
-    let sendfd_sock_path = PathBuf::from_str("/tmp/fd.sock").unwrap();
-    let size_of_ringbuf = 1024 * 32;
-    let heartbeat_interval_second = 1;
-
-    ProducerSettings {
-        control_sock_path,
-        sendfd_sock_path,
-        size_of_ringbuf,
-        heartbeat_interval_second,
     }
 }
 
