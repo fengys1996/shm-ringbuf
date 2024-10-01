@@ -27,8 +27,11 @@ impl Heartbeat {
 
         loop {
             tokio::select! {
+                _ = cancel.cancelled() => {
+                    info!("heartbeat canceled");
+                    break;
+                },
                 _ = tick.tick() => {}
-                _ = cancel.cancelled() => info!("heartbeat canceled"),
             }
 
             self.ping().await;
@@ -42,13 +45,14 @@ impl Heartbeat {
         };
 
         if matches!(e, error::Error::NotFoundRingbuf { .. }) {
-            info!("not found ringbuf");
-
             if let Err(e) = self.session_handle.send().await {
-                warn!("failed to send session, error: {:?}", e);
+                warn!(
+                    "not found ringbuf, failed to re-send session, error: {:?}",
+                    e
+                );
                 self.set_online(false);
             } else {
-                info!("send session success");
+                info!("not found ringbuf, re-send session success");
                 self.set_online(true);
             }
 

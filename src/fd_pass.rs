@@ -79,11 +79,6 @@ where
     pub async fn run(&mut self) -> Result<()> {
         if let Some(parent) = self.sock_path.parent() {
             fs::create_dir_all(parent).await.context(error::IoSnafu)?;
-
-            warn!(
-                "create the parent directory for the unix socket file: {:?}",
-                parent
-            );
         }
 
         if self.sock_path.metadata().is_ok() {

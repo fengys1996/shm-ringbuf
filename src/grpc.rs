@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use hyper_util::rt::TokioIo;
 use snafu::ResultExt;
+use tokio::fs;
 use tokio::net::UnixListener;
 use tokio::net::UnixStream;
 use tokio::sync::Notify;
@@ -14,6 +15,7 @@ use tonic::transport::Server;
 use tonic::transport::Uri;
 use tonic::Request;
 use tower::service_fn;
+use tracing::warn;
 
 use self::proto::shm_control_client::ShmControlClient;
 use self::proto::shm_control_server::ShmControl;
@@ -145,6 +147,25 @@ pub struct ShmCtlServer<F> {
     shutdown: Option<F>,
 }
 
+impl<F> Drop for ShmCtlServer<F> {
+    fn drop(&mut self) {
+        if self.sock_path.metadata().is_err() {
+            return;
+        }
+
+        if std::fs::remove_file(&self.sock_path).is_err() {
+            warn!(
+                "failed to remove the unix socket file: {:?}",
+                self.sock_path
+            );
+
+            return;
+        }
+
+        warn!("remove the unix socket file: {:?}", self.sock_path);
+    }
+}
+
 impl<F> ShmCtlServer<F>
 where
     F: Future<Output = ()>,
@@ -164,6 +185,18 @@ where
     }
 
     pub async fn run(&mut self) -> Result<()> {
+        if let Some(parent) = self.sock_path.parent() {
+            fs::create_dir_all(parent).await.context(error::IoSnafu)?;
+        }
+
+        if self.sock_path.metadata().is_ok() {
+            fs::remove_file(&self.sock_path)
+                .await
+                .context(error::IoSnafu)?;
+
+            warn!("remove the unix socket file: {:?}", self.sock_path);
+        }
+
         let listener =
             UnixListener::bind(&self.sock_path).context(error::IoSnafu)?;
         let uds_stream = UnixListenerStream::new(listener);
