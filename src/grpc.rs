@@ -14,19 +14,15 @@ use tonic::transport::Server;
 use tonic::transport::Uri;
 use tonic::Request;
 use tower::service_fn;
-use tracing::error;
-use tracing::info;
 
 use self::proto::shm_control_client::ShmControlClient;
 use self::proto::shm_control_server::ShmControl;
 use self::proto::shm_control_server::ShmControlServer;
-use self::proto::HandShakeRequest;
 use self::proto::NotifyRequest;
 use self::proto::PingRequest;
 use crate::consumer::session_manager::SessionManagerRef;
 use crate::error;
 use crate::error::Result;
-use crate::ringbuf::VERSION;
 
 pub mod proto {
     tonic::include_proto!("shm");
@@ -40,9 +36,10 @@ pub struct GrpcClient {
 
 impl GrpcClient {
     pub fn new(
-        producer_id: String,
+        producer_id: impl Into<String>,
         sock_path: impl Into<PathBuf>,
     ) -> GrpcClient {
+        let producer_id = producer_id.into();
         let sock_path = sock_path.into();
 
         let connector = service_fn(move |_: Uri| {
@@ -69,21 +66,6 @@ impl GrpcClient {
 }
 
 impl GrpcClient {
-    /// Handshake with the shm server.
-    pub async fn handshake(&self) -> Result<()> {
-        let req = HandShakeRequest {
-            version: VERSION,
-            producer_id: self.producer_id.clone(),
-        };
-        let resp = ShmControlClient::new(self.channel.clone())
-            .hand_shake(Request::new(req))
-            .await
-            .context(error::TonicSnafu {})?
-            .into_inner();
-
-        check_error(resp.status_code, resp.status_message)
-    }
-
     /// Notify the server that the data has been written to shared memory.
     pub async fn notify(&self) -> Result<()> {
         let req = NotifyRequest {
@@ -215,44 +197,6 @@ struct ShmCtlHandler {
 
 #[async_trait::async_trait]
 impl ShmControl for ShmCtlHandler {
-    async fn hand_shake(
-        &self,
-        request: Request<HandShakeRequest>,
-    ) -> std::result::Result<
-        tonic::Response<proto::HandShakeResponse>,
-        tonic::Status,
-    > {
-        let HandShakeRequest {
-            version,
-            producer_id,
-        } = request.into_inner();
-
-        if version != VERSION {
-            let err_msg = format!(
-                "version mismatch, producer version: {}, consumer version: {}, producer id: {}",
-                version, VERSION, producer_id
-            );
-
-            error!("handshake failed: {}", err_msg);
-
-            let resp = proto::HandShakeResponse {
-                status_code: StatusCode::VersionMismatch as u32,
-                status_message: err_msg,
-            };
-
-            return Ok(tonic::Response::new(resp));
-        }
-
-        info!("handshake success, producer_id: {}", producer_id);
-
-        let resp = proto::HandShakeResponse {
-            status_code: StatusCode::Success as u32,
-            status_message: "".to_string(),
-        };
-
-        Ok(tonic::Response::new(resp))
-    }
-
     async fn notify(
         &self,
         request: Request<NotifyRequest>,

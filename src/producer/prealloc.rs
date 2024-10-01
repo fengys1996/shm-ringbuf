@@ -13,7 +13,7 @@ use crate::ringbuf::Ringbuf;
 
 pub struct PreAlloc {
     pub(super) inner: DataBlock<DropGuard>,
-    pub(super) notify: Arc<GrpcClient>,
+    pub(super) notify: GrpcClient,
     pub(super) online: Arc<AtomicBool>,
     pub(super) ringbuf: Arc<RwLock<Ringbuf>>,
 }
