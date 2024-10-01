@@ -27,9 +27,6 @@ use crate::error::Result;
 // Unit is byte.
 pub(crate) const METADATA_LEN: usize = 4 * 4;
 
-/// The version of the ring buffer.
-pub(crate) const VERSION: u32 = 1;
-
 /// The ringbuf data structure, which mapped to the share memory.
 ///
 /// ## The underlying structure

@@ -3,13 +3,6 @@ syntax = "proto3";
 package shm;
 
 service ShmControl {
-  /// Before the client and server transmit data, a handshake protocol is required.
-  ///
-  /// The server is responsible for some things:
-  /// - Confirm the version of the client and server.
-  /// - Associate client id with memfd.
-  rpc HandShake(HandShakeRequest) returns (HandShakeResponse);
-
   /// The producer sends a ping request to the consumer for checking if the consumer is alive
   /// or producer is alive.
   rpc Ping(PingRequest) returns (PingResponse);
@@ -17,14 +10,6 @@ service ShmControl {
   /// The producer notifies the consumer that data has been written into the shared memory 
   /// and can be read.
   rpc Notify(NotifyRequest) returns (NotifyResponse);
-}
-
-message HandShakeRequest {
-  /// The version of the client and server must be matched.
-  uint32 version = 1;
-  
-  /// The producer_id uniquely identifies the client.
-  string producer_id = 2;
 }
 
 message HandShakeResponse {
