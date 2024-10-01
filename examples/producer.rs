@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use shm_ringbuf::error;
-use shm_ringbuf::producer::prealloc::PreAlloc;
+use shm_ringbuf::producer::prealloc::OwnedPreAlloc;
 use shm_ringbuf::producer::settings::ProducerSettingsBuilder;
 use shm_ringbuf::producer::RingbufProducer;
 use tokio::time::sleep;
@@ -36,7 +36,7 @@ async fn main() {
 
         pre_alloc.write(write_str.as_bytes()).unwrap();
 
-        pre_alloc.commit();
+        pre_alloc.commit_and_notify(1024).await;
 
         if i % 100 == 0 {
             sleep(Duration::from_millis(10)).await;
@@ -49,9 +49,9 @@ async fn reserve_with_retry(
     size: usize,
     retry_num: usize,
     retry_interval: Duration,
-) -> Result<PreAlloc, String> {
+) -> Result<OwnedPreAlloc, String> {
     for _ in 0..retry_num {
-        let err = match producer.reserve(size) {
+        let err = match producer.reserve_owned(size) {
             Ok(pre) => return Ok(pre),
             Err(e) => e,
         };
@@ -68,7 +68,7 @@ async fn reserve_with_retry(
 }
 
 async fn wait_consumer_online(
-    pre_alloc: &PreAlloc,
+    pre_alloc: &OwnedPreAlloc,
     retry_num: usize,
     retry_interval: Duration,
 ) -> Result<(), String> {

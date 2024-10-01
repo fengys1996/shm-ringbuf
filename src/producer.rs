@@ -1,4 +1,4 @@
-mod heartbeat;
+pub mod heartbeat;
 pub mod prealloc;
 pub mod settings;
 
@@ -9,11 +9,12 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+use prealloc::PreAlloc;
 use settings::ProducerSettings;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use self::prealloc::PreAlloc;
+use self::prealloc::OwnedPreAlloc;
 use crate::error::Result;
 use crate::fd_pass::send_fd;
 use crate::grpc::client::GrpcClient;
@@ -78,15 +79,29 @@ impl RingbufProducer {
         Ok(producer)
     }
 
+    pub fn reserve_owned(&self, size: usize) -> Result<OwnedPreAlloc> {
+        let mut ringbuf = self.ringbuf.write().unwrap();
+        let datablock = ringbuf.reserve(size)?;
+
+        let pre = OwnedPreAlloc {
+            inner: datablock,
+            notify: self.grpc_client.clone(),
+            online: self.online.clone(),
+            ringbuf: self.ringbuf.clone(),
+        };
+
+        Ok(pre)
+    }
+
     pub fn reserve(&self, size: usize) -> Result<PreAlloc> {
         let mut ringbuf = self.ringbuf.write().unwrap();
         let datablock = ringbuf.reserve(size)?;
 
         let pre = PreAlloc {
             inner: datablock,
-            notify: self.grpc_client.clone(),
-            online: self.online.clone(),
-            ringbuf: self.ringbuf.clone(),
+            notify: &self.grpc_client,
+            online: &self.online,
+            ringbuf: &self.ringbuf,
         };
 
         Ok(pre)

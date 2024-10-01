@@ -11,20 +11,20 @@ use crate::ringbuf::data_block::DataBlock;
 use crate::ringbuf::DropGuard;
 use crate::ringbuf::Ringbuf;
 
-pub struct PreAlloc {
+pub struct PreAlloc<'a> {
     pub(super) inner: DataBlock<DropGuard>,
-    pub(super) notify: GrpcClient,
-    pub(super) online: Arc<AtomicBool>,
-    pub(super) ringbuf: Arc<RwLock<Ringbuf>>,
+    pub(super) notify: &'a GrpcClient,
+    pub(super) online: &'a AtomicBool,
+    pub(super) ringbuf: &'a RwLock<Ringbuf>,
 }
 
-impl PreAlloc {
-    /// Get the slice of the pre-allocated.
+impl<'a> PreAlloc<'a> {
+    /// Get the slice of the [`PreAlloc`].
     pub fn slice(&self) -> &[u8] {
         self.inner.slice().unwrap()
     }
 
-    /// Write data to the pre-allocated.
+    /// Write data to the [`PreAlloc`].
     pub fn write(&mut self, data: &[u8]) -> Result<()> {
         self.inner.write(data)
     }
@@ -38,12 +38,67 @@ impl PreAlloc {
 
     /// Commit the written data and notify the consumer.
     ///
-    /// After commit, the consumer can see the written data.
-    pub async fn commit_and_notify(self, notify_limit: u32) {
+    /// What is the threshold? When the written data exceeds the threshold, the
+    /// producer will notify the consumer. After commit, the consumer can see
+    /// the written data.
+    pub async fn commit_and_notify(self, threshold: u32) {
         self.inner.commit();
 
         let need_notify =
-            self.ringbuf.read().unwrap().written_bytes() > notify_limit;
+            self.ringbuf.read().unwrap().written_bytes() > threshold;
+
+        if !need_notify {
+            return;
+        }
+
+        if let Err(e) = self.notify.notify().await {
+            warn!("failed to notify consumer, error: {:?}", e);
+            // TODO: elegant settings online.
+            self.online.store(false, Ordering::Relaxed);
+        }
+    }
+
+    /// Check if the server is online.
+    pub fn online(&self) -> bool {
+        self.online.load(Ordering::Relaxed)
+    }
+}
+
+pub struct OwnedPreAlloc {
+    pub(super) inner: DataBlock<DropGuard>,
+    pub(super) notify: GrpcClient,
+    pub(super) online: Arc<AtomicBool>,
+    pub(super) ringbuf: Arc<RwLock<Ringbuf>>,
+}
+
+impl OwnedPreAlloc {
+    /// Get the slice of the [`OwnedPreAlloc`].
+    pub fn slice(&self) -> &[u8] {
+        self.inner.slice().unwrap()
+    }
+
+    /// Write data to the [`OwnedPreAlloc`].
+    pub fn write(&mut self, data: &[u8]) -> Result<()> {
+        self.inner.write(data)
+    }
+
+    /// Commit the written data.
+    ///
+    /// After commit, the consumer can see the written data.
+    pub fn commit(&self) {
+        self.inner.commit();
+    }
+
+    /// Commit the written data and notify the consumer.
+    ///
+    /// What is the threshold? When the written data exceeds the threshold, the
+    /// producer will notify the consumer. After commit, the consumer can see
+    /// the written data.
+    pub async fn commit_and_notify(self, threshold: u32) {
+        self.inner.commit();
+
+        let need_notify =
+            self.ringbuf.read().unwrap().written_bytes() > threshold;
 
         if !need_notify {
             return;

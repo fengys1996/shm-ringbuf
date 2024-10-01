@@ -69,7 +69,7 @@ async fn reserve_with_retry(
     size: usize,
     retry_num: usize,
     retry_interval: Duration,
-) -> Result<PreAlloc, String> {
+) -> Result<PreAlloc<'_>, String> {
     for _ in 0..retry_num {
         let err = match producer.reserve(size) {
             Ok(pre) => return Ok(pre),
@@ -86,7 +86,7 @@ async fn reserve_with_retry(
 }
 
 async fn wait_consumer_online(
-    pre_alloc: &PreAlloc,
+    pre_alloc: &PreAlloc<'_>,
     retry_num: usize,
     retry_interval: Duration,
 ) -> Result<(), String> {
