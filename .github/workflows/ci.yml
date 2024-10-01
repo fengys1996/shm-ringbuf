@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  RUST_TOOLCHAIN: 1.81.0
+
+jobs:
+  typos:
+    name: Typos Check
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Check typos
+        uses: crate-ci/typos@master
+        
+  cargo-check:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-20.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Protobuf
+        uses: arduino/setup-protoc@v2
+        
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          override: true
+          components: rustfmt, clippy
+          
+      - name: Check format
+        run: cargo fmt
+
+      - name: Check clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings -D clippy::print_stdout -D clippy::print_stderr
+        
+      - name: Install latest nextest release
+        uses: taiki-e/install-action@nextest
+        
+      - name: Check test
+        run: cargo nextest run
