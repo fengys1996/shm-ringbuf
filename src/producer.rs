@@ -16,7 +16,7 @@ use uuid::Uuid;
 use self::prealloc::PreAlloc;
 use crate::error::Result;
 use crate::fd_pass::send_fd;
-use crate::grpc::GrpcClient;
+use crate::grpc::client::GrpcClient;
 use crate::memfd::memfd_create;
 use crate::memfd::MemfdSettings;
 use crate::ringbuf::Ringbuf;

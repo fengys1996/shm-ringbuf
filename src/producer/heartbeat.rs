@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use crate::error;
-use crate::grpc::GrpcClient;
+use crate::grpc::client::GrpcClient;
 
 use super::SessionHandleRef;
 

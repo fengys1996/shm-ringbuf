@@ -6,7 +6,7 @@ use std::sync::RwLock;
 use tracing::warn;
 
 use crate::error::Result;
-use crate::grpc::GrpcClient;
+use crate::grpc::client::GrpcClient;
 use crate::ringbuf::data_block::DataBlock;
 use crate::ringbuf::DropGuard;
 use crate::ringbuf::Ringbuf;

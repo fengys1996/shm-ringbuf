@@ -21,7 +21,7 @@ use tracing::warn;
 use self::decode::Context;
 use self::decode::Decode;
 use crate::fd_pass::FdRecvServer;
-use crate::grpc::ShmCtlServer;
+use crate::grpc::server::ShmCtlServer;
 use crate::ringbuf::Ringbuf;
 
 pub struct RingbufConsumer<D, Item, E> {

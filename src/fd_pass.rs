@@ -46,11 +46,10 @@ impl<F> Drop for FdRecvServer<F> {
         }
 
         if std::fs::remove_file(&self.sock_path).is_err() {
-            error!(
+            warn!(
                 "failed to remove the unix socket file: {:?}",
                 self.sock_path
             );
-
             return;
         }
 
@@ -86,7 +85,7 @@ where
                 .await
                 .context(error::IoSnafu)?;
 
-            warn!("remove the unix socket file: {:?}", self.sock_path);
+            info!("remove the unix socket file: {:?}", self.sock_path);
         }
 
         let listener =
