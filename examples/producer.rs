@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use shm_ringbuf::error;
-use shm_ringbuf::producer::prealloc::OwnedPreAlloc;
+use shm_ringbuf::producer::prealloc::PreAlloc;
 use shm_ringbuf::producer::settings::ProducerSettingsBuilder;
 use shm_ringbuf::producer::RingbufProducer;
 use tokio::time::sleep;
@@ -19,11 +19,11 @@ async fn main() {
         .heartbeat_interval(Duration::from_secs(1))
         .build();
 
-    let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
+    let mut producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
     for i in 0..10000 {
         let mut pre_alloc =
-            reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
+            reserve_with_retry(&mut producer, 20, 3, Duration::from_secs(1))
                 .await
                 .unwrap();
 
@@ -36,7 +36,7 @@ async fn main() {
 
         pre_alloc.write(write_str.as_bytes()).unwrap();
 
-        pre_alloc.commit_and_notify(1024).await;
+        pre_alloc.commit_and_notify().await;
 
         if i % 100 == 0 {
             sleep(Duration::from_millis(10)).await;
@@ -44,14 +44,19 @@ async fn main() {
     }
 }
 
-async fn reserve_with_retry(
-    producer: &RingbufProducer,
+async fn reserve_with_retry<'a>(
+    producer: &'a mut RingbufProducer,
     size: usize,
     retry_num: usize,
     retry_interval: Duration,
-) -> Result<OwnedPreAlloc, String> {
+) -> Result<PreAlloc<'a>, String> {
+    // let err = match producer.reserve(size) {
+    //     Ok(pre) => return Ok(pre),
+    //     Err(e) => e,
+    // };
+
     for _ in 0..retry_num {
-        let err = match producer.reserve_owned(size) {
+        let err = match producer.reserve(size) {
             Ok(pre) => return Ok(pre),
             Err(e) => e,
         };
@@ -68,7 +73,7 @@ async fn reserve_with_retry(
 }
 
 async fn wait_consumer_online(
-    pre_alloc: &OwnedPreAlloc,
+    pre_alloc: &PreAlloc<'_>,
     retry_num: usize,
     retry_interval: Duration,
 ) -> Result<(), String> {

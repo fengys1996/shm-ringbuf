@@ -62,7 +62,7 @@ pub struct Ringbuf {
 
     /// The drop guard of the ring buffer, which is used to munmap when all
     /// [Ringbuf] and related [DataBlock] is dropped.
-    drop_guard: Arc<DropGuard>,
+    _drop_guard: Arc<DropGuard>,
 }
 
 unsafe impl Send for Ringbuf {}
@@ -182,7 +182,7 @@ impl Ringbuf {
             data_part_ptr,
             data_part_len,
             metadata,
-            drop_guard,
+            _drop_guard: drop_guard,
         };
 
         Ok(ringbuf)
@@ -192,7 +192,10 @@ impl Ringbuf {
     /// offset.
     ///
     /// Note: actual allocated bytes may be greater than the given bytes.
-    pub fn reserve(&mut self, bytes: usize) -> Result<DataBlock<DropGuard>> {
+    pub fn reserve(
+        &mut self,
+        bytes: usize,
+    ) -> Result<DataBlock<'_, DropGuard>> {
         // 1. calculate the actual allocated bytes.
         let bytes = (bytes + 3) / 4 * 4;
         let actual_alloc_bytes = (bytes + HEADER_LEN) as u32;
@@ -210,11 +213,9 @@ impl Ringbuf {
         let produce_offset = self.produce_offset();
         let start_ptr =
             unsafe { self.data_part_ptr.add(produce_offset as usize) };
-        let drop_guard = self.drop_guard.clone();
 
-        let data_block = unsafe {
-            DataBlock::new(start_ptr, actual_alloc_bytes, drop_guard)?
-        };
+        let data_block =
+            unsafe { DataBlock::new(start_ptr, actual_alloc_bytes)? };
 
         // 4. advance the produce offset.
         unsafe {
@@ -237,8 +238,7 @@ impl Ringbuf {
         let start_ptr =
             unsafe { self.data_part_ptr.add(consume_offset as usize) };
 
-        let data_block =
-            unsafe { DataBlock::from_raw(start_ptr, self.drop_guard.clone()) };
+        let data_block = unsafe { DataBlock::from_raw(start_ptr) };
 
         Some(data_block)
     }

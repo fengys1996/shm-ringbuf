@@ -51,7 +51,7 @@ async fn test_ringbuf_spsc() {
 
             pre_alloc.write(write_str.as_bytes()).unwrap();
 
-            pre_alloc.commit_and_notify(100).await;
+            pre_alloc.commit_and_notify().await;
         }
     });
 

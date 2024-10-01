@@ -7,14 +7,12 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::sync::RwLock;
 
 use prealloc::PreAlloc;
 use settings::ProducerSettings;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use self::prealloc::OwnedPreAlloc;
 use crate::error::Result;
 use crate::fd_pass::send_fd;
 use crate::grpc::client::GrpcClient;
@@ -23,7 +21,7 @@ use crate::memfd::MemfdSettings;
 use crate::ringbuf::Ringbuf;
 
 pub struct RingbufProducer {
-    ringbuf: Arc<RwLock<Ringbuf>>,
+    ringbuf: Ringbuf,
     grpc_client: GrpcClient,
     online: Arc<AtomicBool>,
     cancel: CancellationToken,
@@ -48,7 +46,7 @@ impl RingbufProducer {
         })?;
 
         let grpc_client = GrpcClient::new(&client_id, grpc_sock_path);
-        let ringbuf = Arc::new(RwLock::new(Ringbuf::new(&memfd, ringbuf_len)?));
+        let ringbuf = Ringbuf::new(&memfd, ringbuf_len)?;
         let online = Arc::new(AtomicBool::new(false));
         let cancel = CancellationToken::new();
 
@@ -79,32 +77,45 @@ impl RingbufProducer {
         Ok(producer)
     }
 
-    pub fn reserve_owned(&self, size: usize) -> Result<OwnedPreAlloc> {
-        let mut ringbuf = self.ringbuf.write().unwrap();
-        let datablock = ringbuf.reserve(size)?;
+    pub fn reserve(&mut self, size: usize) -> Result<PreAlloc> {
+        let datablock = self.ringbuf.reserve(size)?;
 
-        let pre = OwnedPreAlloc {
-            inner: datablock,
-            notify: self.grpc_client.clone(),
-            online: self.online.clone(),
-            ringbuf: self.ringbuf.clone(),
-        };
-
-        Ok(pre)
-    }
-
-    pub fn reserve(&self, size: usize) -> Result<PreAlloc> {
-        let mut ringbuf = self.ringbuf.write().unwrap();
-        let datablock = ringbuf.reserve(size)?;
-
-        let pre = PreAlloc {
+        let pre_alloc = PreAlloc {
             inner: datablock,
             notify: &self.grpc_client,
             online: &self.online,
-            ringbuf: &self.ringbuf,
         };
 
-        Ok(pre)
+        Ok(pre_alloc)
+    }
+
+    pub async fn reserve_with_retry<'a>(
+        &'a mut self,
+        size: usize,
+        retry_num: usize,
+        retry_interval: std::time::Duration,
+    ) -> Result<PreAlloc<'a>> {
+        // self.reserve(size);
+        // self.reserve(size);
+        // self.reserve(size);
+        // self.reserve(size);
+        // let s = self.reserve(size);
+        // s
+        for _ in 0..retry_num {
+            let ret = self.reserve(size);
+            match ret {
+                Ok(pre) => return Ok(pre),
+                Err(e) => {
+                    if !matches!(e, crate::error::Error::NotEnoughSpace { .. })
+                    {
+                        return Err(e);
+                    }
+                }
+            }
+
+            tokio::time::sleep(retry_interval).await;
+        }
+        todo!()
     }
 
     /// Check if the server is online.
