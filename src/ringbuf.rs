@@ -1,3 +1,5 @@
+pub mod data_block;
+
 use std::ffi::c_void;
 use std::fs;
 use std::num::NonZeroUsize;
@@ -6,6 +8,8 @@ use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use data_block::DataBlock;
+use data_block::HEADER_LEN;
 use nix::libc::_SC_PAGESIZE;
 use nix::sys::mman;
 use nix::sys::mman::MapFlags;
@@ -15,8 +19,8 @@ use snafu::ResultExt;
 use tracing::error;
 use tracing::info;
 
-use crate::data_block::DataBlock;
-use crate::data_block::HEADER_LEN;
+// use crate::data_block::DataBlock;
+// use crate::data_block::HEADER_LEN;
 use crate::error;
 use crate::error::Result;
 
@@ -60,7 +64,7 @@ pub struct Ringbuf {
     metadata: RingbufMetadata,
 
     /// The drop guard of the ring buffer, which is used to munmap when all
-    /// [Ringbuf] and releated [DataBlock] is dropped.
+    /// [Ringbuf] and related [DataBlock] is dropped.
     drop_guard: Arc<DropGuard>,
 }
 
@@ -472,10 +476,10 @@ mod tests {
     fn test_ringbuf_advance_produce_offset_with_multi_thread() {
         let file = tempfile::tempfile().unwrap();
 
-        let expexted_ringbuf_size = 102400 + 1;
+        let expected_ringbuf_size = 102400 + 1;
         let ringbuf =
-            ringbuf::Ringbuf::new(&file, expexted_ringbuf_size).unwrap();
-        let actual_alloc_bytes = page_align_size(expexted_ringbuf_size) as u32;
+            ringbuf::Ringbuf::new(&file, expected_ringbuf_size).unwrap();
+        let actual_alloc_bytes = page_align_size(expected_ringbuf_size) as u32;
 
         let mut joins = Vec::with_capacity(10);
         for _ in 0..10 {
@@ -506,10 +510,10 @@ mod tests {
     fn test_ringbuf_advance_consume_offset_with_multi_thread() {
         let file = tempfile::tempfile().unwrap();
 
-        let expexted_ringbuf_size = 102400 + 1;
+        let expected_ringbuf_size = 102400 + 1;
         let ringbuf =
-            ringbuf::Ringbuf::new(&file, expexted_ringbuf_size).unwrap();
-        let actual_alloc_bytes = page_align_size(expexted_ringbuf_size) as u32;
+            ringbuf::Ringbuf::new(&file, expected_ringbuf_size).unwrap();
+        let actual_alloc_bytes = page_align_size(expected_ringbuf_size) as u32;
 
         let mut joins = Vec::with_capacity(10);
         for _ in 0..10 {

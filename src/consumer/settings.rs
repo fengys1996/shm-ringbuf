@@ -3,16 +3,12 @@ use std::{path::PathBuf, time::Duration};
 const DEFAULT_GRPC_SOCK_PATH: &str = "/tmp/grpc.sock";
 const DEFAULT_FDPASS_SOCK_PATH: &str = "/tmp/fdpass.sock";
 const DEFAULT_PROCESS_DURATION: Duration = Duration::from_millis(100);
-const DEFAULT_RINGBUF_EXPIRE: Duration = Duration::from_secs(10);
-const DEFAULT_RINGBUF_CHECK_INTERVAL: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone)]
 pub struct ConsumerSettings {
     pub(super) grpc_sock_path: PathBuf,
     pub(super) fdpass_sock_path: PathBuf,
     pub(super) process_interval: Duration,
-    pub(super) ringbuf_expire: Duration,
-    pub(super) ringbuf_check_interval: Duration,
     pub(super) max_session_capacity: u64,
     pub(super) session_tti: Duration,
 }
@@ -85,13 +81,6 @@ impl ConsumerSettingsBuilder {
         let process_duration =
             self.process_duration.unwrap_or(DEFAULT_PROCESS_DURATION);
 
-        let ringbuf_expire =
-            self.ringbuf_expire.unwrap_or(DEFAULT_RINGBUF_EXPIRE);
-
-        let ringbuf_check_interval = self
-            .ringbuf_check_interval
-            .unwrap_or(DEFAULT_RINGBUF_CHECK_INTERVAL);
-
         let max_session_capacity = self.max_session_capacity.unwrap_or(10);
 
         let session_ttl = self.session_tti.unwrap_or(Duration::from_secs(10));
@@ -100,8 +89,6 @@ impl ConsumerSettingsBuilder {
             grpc_sock_path,
             fdpass_sock_path,
             process_interval: process_duration,
-            ringbuf_expire,
-            ringbuf_check_interval,
             max_session_capacity,
             session_tti: session_ttl,
         }
@@ -114,8 +101,7 @@ mod tests {
 
     use crate::consumer::settings::{
         DEFAULT_FDPASS_SOCK_PATH, DEFAULT_GRPC_SOCK_PATH,
-        DEFAULT_PROCESS_DURATION, DEFAULT_RINGBUF_CHECK_INTERVAL,
-        DEFAULT_RINGBUF_EXPIRE,
+        DEFAULT_PROCESS_DURATION,
     };
 
     use super::{ConsumerSettings, ConsumerSettingsBuilder};
@@ -128,8 +114,6 @@ mod tests {
             grpc_sock_path,
             fdpass_sock_path,
             process_interval: process_duration,
-            ringbuf_expire,
-            ringbuf_check_interval,
             max_session_capacity,
             session_tti,
         } = settings;
@@ -137,8 +121,6 @@ mod tests {
         assert_eq!(grpc_sock_path.as_os_str(), DEFAULT_GRPC_SOCK_PATH);
         assert_eq!(fdpass_sock_path.as_os_str(), DEFAULT_FDPASS_SOCK_PATH);
         assert_eq!(process_duration, DEFAULT_PROCESS_DURATION);
-        assert_eq!(ringbuf_expire, DEFAULT_RINGBUF_EXPIRE);
-        assert_eq!(ringbuf_check_interval, DEFAULT_RINGBUF_CHECK_INTERVAL);
         assert_eq!(max_session_capacity, 10);
         assert_eq!(session_tti, Duration::from_secs(10));
     }
@@ -159,8 +141,6 @@ mod tests {
             grpc_sock_path,
             fdpass_sock_path,
             process_interval: process_duration,
-            ringbuf_expire,
-            ringbuf_check_interval,
             max_session_capacity,
             session_tti,
         } = settings;
@@ -168,8 +148,6 @@ mod tests {
         assert_eq!(grpc_sock_path.as_os_str(), "/tmp/grpc_test.sock");
         assert_eq!(fdpass_sock_path.as_os_str(), "/tmp/fd_test.sock");
         assert_eq!(process_duration, Duration::from_millis(100));
-        assert_eq!(ringbuf_expire, Duration::from_secs(20));
-        assert_eq!(ringbuf_check_interval, Duration::from_secs(6));
         assert_eq!(max_session_capacity, 20);
         assert_eq!(session_tti, Duration::from_secs(30));
     }
