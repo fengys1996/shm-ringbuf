@@ -22,7 +22,7 @@ use crate::memfd::MemfdSettings;
 use crate::ringbuf::Ringbuf;
 
 pub struct RingbufProducer {
-    ringbuf: Arc<RwLock<Ringbuf>>,
+    ringbuf: RwLock<Ringbuf>,
     grpc_client: GrpcClient,
     online: Arc<AtomicBool>,
     cancel: CancellationToken,
@@ -47,7 +47,7 @@ impl RingbufProducer {
         })?;
 
         let grpc_client = GrpcClient::new(&client_id, grpc_sock_path);
-        let ringbuf = Arc::new(RwLock::new(Ringbuf::new(&memfd, ringbuf_len)?));
+        let ringbuf = RwLock::new(Ringbuf::new(&memfd, ringbuf_len)?);
         let online = Arc::new(AtomicBool::new(false));
         let cancel = CancellationToken::new();
 
@@ -79,14 +79,13 @@ impl RingbufProducer {
     }
 
     pub fn reserve(&self, size: usize) -> Result<PreAlloc> {
-        let mut ringbuf = self.ringbuf.write().unwrap();
-        let datablock = ringbuf.reserve(size)?;
+        let data_block = self.ringbuf.write().unwrap().reserve(size)?;
 
         let pre = PreAlloc {
-            inner: datablock,
-            notify: self.grpc_client.clone(),
-            online: self.online.clone(),
-            ringbuf: self.ringbuf.clone(),
+            inner: data_block,
+            notify: &self.grpc_client,
+            online: &self.online,
+            ringbuf: &self.ringbuf,
         };
 
         Ok(pre)

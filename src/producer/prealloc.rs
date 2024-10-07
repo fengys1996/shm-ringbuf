@@ -11,14 +11,14 @@ use crate::ringbuf::data_block::DataBlock;
 use crate::ringbuf::DropGuard;
 use crate::ringbuf::Ringbuf;
 
-pub struct PreAlloc {
+pub struct PreAlloc<'a> {
     pub(super) inner: DataBlock<DropGuard>,
-    pub(super) notify: GrpcClient,
-    pub(super) online: Arc<AtomicBool>,
-    pub(super) ringbuf: Arc<RwLock<Ringbuf>>,
+    pub(super) notify: &'a GrpcClient,
+    pub(super) online: &'a Arc<AtomicBool>,
+    pub(super) ringbuf: &'a RwLock<Ringbuf>,
 }
 
-impl PreAlloc {
+impl<'a> PreAlloc<'a> {
     /// Get the slice of the pre-allocated.
     pub fn slice(&self) -> &[u8] {
         self.inner.slice().unwrap()

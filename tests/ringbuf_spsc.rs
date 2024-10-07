@@ -86,7 +86,7 @@ async fn reserve_with_retry(
 }
 
 async fn wait_consumer_online(
-    pre_alloc: &PreAlloc,
+    pre_alloc: &PreAlloc<'_>,
     retry_num: usize,
     retry_interval: Duration,
 ) -> Result<(), String> {
