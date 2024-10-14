@@ -118,3 +118,17 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub struct DataProcessResult {
+    pub status_code: u32,
+    pub message: String,
+}
+
+impl DataProcessResult {
+    pub fn ok() -> Self {
+        Self {
+            status_code: 0,
+            message: String::new(),
+        }
+    }
+}

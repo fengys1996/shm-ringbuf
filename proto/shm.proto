@@ -3,13 +3,16 @@ syntax = "proto3";
 package shm;
 
 service ShmControl {
-  /// The producer sends a ping request to the consumer for checking if the consumer is alive
-  /// or producer is alive.
+  /// The producer sends ping request to the consumer for checking if the status
+  /// of the consumer and the producer.
   rpc Ping(PingRequest) returns (PingResponse);
 
-  /// The producer notifies the consumer that data has been written into the shared memory 
-  /// and can be read.
+  /// The producer notifies the consumer that data has been written into the 
+  /// shared memory and can be read.
   rpc Notify(NotifyRequest) returns (NotifyResponse);
+
+  /// Get the execution result set stream of data processing.
+  rpc FetchResult(FetchResultRequest) returns (stream ResultSet);
 }
 
 message HandShakeResponse {
@@ -39,3 +42,19 @@ message NotifyRequest {
 }
 
 message NotifyResponse {}
+
+message FetchResultRequest {
+  /// The producer_id uniquely identifies the client.
+  string producer_id = 1;
+}
+
+message ResultSet {
+  repeated Result results = 1;
+}
+
+message Result {
+  /// The id of the request.
+  uint32 id = 1;
+  uint32 status_code = 2;
+  string message = 3;
+}

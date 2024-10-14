@@ -80,6 +80,10 @@ impl<T> DataBlock<T> {
     pub fn is_busy(&self) -> bool {
         self.header.busy()
     }
+
+    pub fn id(&self) -> u32 {
+        self.header.id()
+    }
 }
 
 impl<T> DataBlock<T> {
@@ -176,6 +180,8 @@ struct Header {
     /// cannot consume the [`DataBlock`]. Else it means that the consumer can
     /// reading the [`DataBlock`].
     busy_ptr: *mut u32,
+
+    id_ptr: *mut u32,
 }
 
 impl Header {
@@ -188,11 +194,13 @@ impl Header {
         let capacity_ptr = header_ptr as *mut u32;
         let len_ptr = capacity_ptr.add(1);
         let busy_ptr = len_ptr.add(2);
+        let id_ptr = busy_ptr.add(1);
 
         Self {
             capacity_ptr,
             len_ptr,
             busy_ptr,
+            id_ptr,
         }
     }
 
@@ -242,6 +250,12 @@ impl Header {
         let ptr = self.len_ptr;
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.fetch_add(len, Ordering::Relaxed);
+    }
+
+    fn id(&self) -> u32 {
+        let ptr = self.id_ptr;
+        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
+        atomic.load(Ordering::Relaxed)
     }
 }
 
