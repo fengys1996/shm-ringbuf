@@ -1,9 +1,17 @@
-use crate::error::Result;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
+use futures::FutureExt;
+use tokio::sync::oneshot::Receiver;
+
+use crate::error::{DataProcessResult, Result};
 use crate::ringbuf::data_block::DataBlock;
 use crate::ringbuf::DropGuard;
 
 pub struct PreAlloc {
     pub(super) data_block: DataBlock<DropGuard>,
+    pub(super) rx: Receiver<DataProcessResult>,
 }
 
 impl PreAlloc {
@@ -22,5 +30,24 @@ impl PreAlloc {
     /// After commit, the consumer can see the written data.
     pub fn commit(&self) {
         self.data_block.commit();
+    }
+
+    pub fn wait_result(self) -> Handle {
+        Handle { rx: self.rx }
+    }
+}
+
+pub struct Handle {
+    rx: Receiver<DataProcessResult>,
+}
+
+impl Future for Handle {
+    type Output = std::result::Result<DataProcessResult, ()>;
+
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Self::Output> {
+        self.rx.poll_unpin(cx).map(|res| res.map_err(|_| ()))
     }
 }

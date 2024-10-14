@@ -195,7 +195,7 @@ impl Header {
     unsafe fn fow_raw(header_ptr: *mut u8) -> Self {
         let capacity_ptr = header_ptr as *mut u32;
         let len_ptr = capacity_ptr.add(1);
-        let busy_ptr = len_ptr.add(2);
+        let busy_ptr = len_ptr.add(1);
         let id_ptr = busy_ptr.add(1);
 
         Self {

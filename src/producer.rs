@@ -1,6 +1,8 @@
-mod heartbeat;
 pub mod prealloc;
 pub mod settings;
+
+mod fetch;
+mod heartbeat;
 
 use std::fs::File;
 use std::path::PathBuf;
@@ -9,7 +11,10 @@ use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::time::Duration;
 
+use fetch::ResultFetcher;
+use fetch::ResultFetcherRef;
 use settings::ProducerSettings;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
@@ -29,6 +34,7 @@ pub struct RingbufProducer {
     online: Arc<AtomicBool>,
     cancel: CancellationToken,
     business_id: AtomicU32,
+    result_fetcher: ResultFetcherRef,
 }
 
 impl RingbufProducer {
@@ -72,23 +78,34 @@ impl RingbufProducer {
         let cancel_c = cancel.clone();
         tokio::spawn(async move { heartbeat.run(cancel_c).await });
 
+        let result_fetcher = Arc::new(ResultFetcher::new(
+            grpc_client.clone(),
+            Duration::from_secs(5),
+        ));
+
+        let result_fetch_c = result_fetcher.clone();
+        tokio::spawn(async move { result_fetch_c.run().await });
+
         let producer = RingbufProducer {
             ringbuf,
             grpc_client,
             online,
             cancel,
             business_id,
+            result_fetcher,
         };
 
         Ok(producer)
     }
 
     pub fn reserve(&self, size: usize) -> Result<PreAlloc> {
-        let business_id = self.business_id();
+        let business_id = self.gen_business_id();
         let data_block =
             self.ringbuf.write().unwrap().reserve(size, business_id)?;
 
-        let pre = PreAlloc { data_block };
+        let rx = self.result_fetcher.register(business_id);
+
+        let pre = PreAlloc { data_block, rx };
 
         Ok(pre)
     }
@@ -114,7 +131,13 @@ impl RingbufProducer {
         self.online.load(Ordering::Relaxed)
     }
 
-    fn business_id(&self) -> u32 {
+    /// Check if the result fetcher is normal.
+    pub fn result_fetch_normal(&self) -> bool {
+        self.result_fetcher.is_normal()
+    }
+
+    /// Generate a business id.
+    fn gen_business_id(&self) -> u32 {
         self.business_id.fetch_add(1, Ordering::Relaxed)
     }
 }

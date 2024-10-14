@@ -20,6 +20,7 @@ async fn main() {
         .build();
 
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
+    let mut joins = Vec::with_capacity(100);
 
     for i in 0..10000 {
         let mut pre_alloc =
@@ -38,9 +39,23 @@ async fn main() {
 
         pre_alloc.commit();
 
+        let join = pre_alloc.wait_result();
+
+        joins.push(join);
+
         if i % 100 == 0 {
-            sleep(Duration::from_millis(10)).await;
+            for j in joins.drain(..) {
+                let _ = j.await;
+            }
         }
+
+        if i % 10 == 0 {
+            sleep(Duration::from_millis(1000)).await;
+        }
+    }
+
+    for j in joins {
+        let _ = j.await;
     }
 }
 
@@ -73,7 +88,7 @@ async fn wait_consumer_online(
     retry_interval: Duration,
 ) -> Result<(), String> {
     for _ in 0..retry_num {
-        if p.server_online() {
+        if p.server_online() && p.result_fetch_normal() {
             return Ok(());
         }
         sleep(retry_interval).await;

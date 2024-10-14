@@ -7,11 +7,14 @@ use tonic::transport::Channel;
 use tonic::transport::Endpoint;
 use tonic::transport::Uri;
 use tonic::Request;
+use tonic::Streaming;
 use tower::service_fn;
 
 use super::proto::shm_control_client::ShmControlClient;
+use super::proto::FetchResultRequest;
 use super::proto::NotifyRequest;
 use super::proto::PingRequest;
+use super::proto::ResultSet;
 use super::status_code::StatusCode;
 use crate::error;
 use crate::error::Result;
@@ -82,6 +85,20 @@ impl GrpcClient {
             .into_inner();
 
         check_error(resp.status_code, resp.status_message)
+    }
+
+    pub async fn fetch_result(&self) -> Result<Streaming<ResultSet>> {
+        let req = FetchResultRequest {
+            producer_id: self.client_id.clone(),
+        };
+
+        let result_stream = ShmControlClient::new(self.channel.clone())
+            .fetch_result(Request::new(req))
+            .await
+            .context(error::TonicSnafu {})?
+            .into_inner();
+
+        Ok(result_stream)
     }
 }
 
