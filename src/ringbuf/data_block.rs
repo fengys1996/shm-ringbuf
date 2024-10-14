@@ -81,8 +81,8 @@ impl<T> DataBlock<T> {
         self.header.busy()
     }
 
-    pub fn id(&self) -> u32 {
-        self.header.id()
+    pub fn business_id(&self) -> u32 {
+        self.header.business_id()
     }
 }
 
@@ -94,6 +94,7 @@ impl<T> DataBlock<T> {
     /// The caller must ensurea that `start_ptr` and `len` identify a valid
     /// [`DataBlock`].
     pub(crate) unsafe fn new(
+        business_id: u32,
         start_ptr: *mut u8,
         len: u32,
         object: Arc<T>,
@@ -112,6 +113,7 @@ impl<T> DataBlock<T> {
         header.set_capacity(len - header_len_u32);
         header.set_written(0);
         header.set_busy(true);
+        header.set_business_id(business_id);
 
         let data_ptr = unsafe { start_ptr.add(HEADER_LEN) };
 
@@ -163,7 +165,7 @@ impl<T> DataBlock<T> {
 /// |                   |                   |
 /// v                   v                   v
 /// +-------------------+-------------------+-------------------+-------------------+
-/// | capacity          | len               | busy              | padding           |
+/// | capacity          | len               | busy              | business ID       |
 /// +-------------------+-------------------+-------------------+-------------------+
 /// | 4 bytes           | 4 bytes           | 4 bytes           | 4 bytes           |
 /// +-------------------+-------------------+-------------------+-------------------+
@@ -252,10 +254,16 @@ impl Header {
         atomic.fetch_add(len, Ordering::Relaxed);
     }
 
-    fn id(&self) -> u32 {
+    fn business_id(&self) -> u32 {
         let ptr = self.id_ptr;
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.load(Ordering::Relaxed)
+    }
+
+    fn set_business_id(&self, id: u32) {
+        let ptr = self.id_ptr;
+        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
+        atomic.store(id, Ordering::Relaxed);
     }
 }
 
@@ -296,12 +304,12 @@ mod tests {
         let small_len = HEADER_LEN as u32;
 
         let result =
-            unsafe { DataBlock::new(data_ptr, small_len, Arc::new(())) };
+            unsafe { DataBlock::new(1, data_ptr, small_len, Arc::new(())) };
 
         assert!(matches!(result, Err(error::Error::InvalidParameter { .. })));
 
         let result = unsafe {
-            DataBlock::new(data_ptr, HEADER_LEN as u32 + 1, Arc::new(()))
+            DataBlock::new(1, data_ptr, HEADER_LEN as u32 + 1, Arc::new(()))
         };
         assert!(result.is_ok());
     }
@@ -313,15 +321,12 @@ mod tests {
         let data_ptr = data.as_ptr() as *mut u8;
 
         let data_block =
-            unsafe { DataBlock::new(data_ptr, 1024, Arc::new(())) }.unwrap();
+            unsafe { DataBlock::new(1, data_ptr, 1024, Arc::new(())) }.unwrap();
 
         assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
         assert_eq!(data_block.written_len(), 0);
         assert!(data_block.is_busy());
-
-        assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
-        assert_eq!(data_block.written_len(), 0);
-        assert!(data_block.is_busy());
+        assert_eq!(data_block.business_id(), 1);
 
         let data_block = unsafe { DataBlock::from_raw(data_ptr, Arc::new(())) };
 

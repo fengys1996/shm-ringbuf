@@ -192,7 +192,11 @@ impl Ringbuf {
     /// offset.
     ///
     /// Note: actual allocated bytes may be greater than the given bytes.
-    pub fn reserve(&mut self, bytes: usize) -> Result<DataBlock<DropGuard>> {
+    pub fn reserve(
+        &mut self,
+        bytes: usize,
+        business_id: u32,
+    ) -> Result<DataBlock<DropGuard>> {
         // 1. calculate the actual allocated bytes.
         let bytes = (bytes + 3) / 4 * 4;
         let actual_alloc_bytes = (bytes + HEADER_LEN) as u32;
@@ -213,7 +217,12 @@ impl Ringbuf {
         let drop_guard = self.drop_guard.clone();
 
         let data_block = unsafe {
-            DataBlock::new(start_ptr, actual_alloc_bytes, drop_guard)?
+            DataBlock::new(
+                business_id,
+                start_ptr,
+                actual_alloc_bytes,
+                drop_guard,
+            )?
         };
 
         // 4. advance the produce offset.
@@ -565,7 +574,7 @@ mod tests {
         let mut ringbuf = Ringbuf::new(&file, data_size).unwrap();
 
         for i in 1..10000 {
-            let result = ringbuf.reserve(20);
+            let result = ringbuf.reserve(20, 1);
             if matches!(result, Err(error::Error::NotEnoughSpace { .. })) {
                 ringbuf.atomic_set_produce_offset(0);
                 continue;

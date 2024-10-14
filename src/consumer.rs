@@ -153,12 +153,12 @@ where
         }
 
         let data_slice = data_block.slice().unwrap();
-        let req_id = data_block.id();
+        let business_id = data_block.business_id();
 
         if let Err(e) = processor.process(data_slice) {
-            session.push_result(req_id, e).await;
+            session.push_result(business_id, e).await;
         } else {
-            session.push_ok(req_id).await;
+            session.push_ok(business_id).await;
         }
 
         unsafe { ringbuf.advance_consume_offset(data_block.total_len()) }
