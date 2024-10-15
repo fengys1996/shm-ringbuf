@@ -1,13 +1,13 @@
-use std::{
-    ffi::CString,
-    fs,
-    os::fd::{FromRawFd, IntoRawFd},
-};
+use std::ffi::CString;
+use std::fs;
+use std::os::fd::FromRawFd;
+use std::os::fd::IntoRawFd;
 
 use nix::sys::memfd;
 use snafu::ResultExt;
 
-use crate::error::{self, Result};
+use crate::error::Result;
+use crate::error::{self};
 
 /// Settings for creating a memfd.
 #[derive(Debug, Clone)]

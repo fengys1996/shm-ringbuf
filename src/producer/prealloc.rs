@@ -1,11 +1,13 @@
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::Context;
+use std::task::Poll;
 
 use futures::FutureExt;
 use tokio::sync::oneshot::Receiver;
 
-use crate::error::{DataProcessResult, Result};
+use crate::error::DataProcessResult;
+use crate::error::Result;
 use crate::ringbuf::data_block::DataBlock;
 use crate::ringbuf::DropGuard;
 

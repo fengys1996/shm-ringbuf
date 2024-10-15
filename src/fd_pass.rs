@@ -237,16 +237,15 @@ pub async fn send_fd(
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, time::Duration};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     use tokio::time::sleep;
     use tokio_util::sync::CancellationToken;
 
-    use crate::{
-        consumer::session_manager::SessionManager, fd_pass::FdRecvServer,
-    };
-
     use super::send_fd;
+    use crate::consumer::session_manager::SessionManager;
+    use crate::fd_pass::FdRecvServer;
 
     #[tokio::test]
     async fn test_fd_pass() {

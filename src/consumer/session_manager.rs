@@ -1,3 +1,4 @@
+use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -12,7 +13,6 @@ use tracing::warn;
 use crate::error::DataProcessResult;
 use crate::grpc::proto;
 use crate::ringbuf::Ringbuf;
-use std::result::Result as StdResult;
 
 /// When each client connects, the server will generate a session to save relevant
 /// information.

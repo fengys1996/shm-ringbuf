@@ -1,20 +1,18 @@
-use std::{
-    sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
-};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use dashmap::DashMap;
-use tokio::{
-    sync::oneshot::{channel, Receiver, Sender},
-    time::sleep,
-};
+use tokio::sync::oneshot::channel;
+use tokio::sync::oneshot::Receiver;
+use tokio::sync::oneshot::Sender;
+use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use tracing::warn;
 
-use crate::{
-    error::DataProcessResult,
-    grpc::{client::GrpcClient, proto::ResultSet},
-};
+use crate::error::DataProcessResult;
+use crate::grpc::client::GrpcClient;
+use crate::grpc::proto::ResultSet;
 
 pub struct ResultFetcher {
     grpc_client: GrpcClient,

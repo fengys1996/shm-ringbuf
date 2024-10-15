@@ -1,4 +1,5 @@
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
+use std::time::Duration;
 
 const DEFAULT_GRPC_SOCK_PATH: &str = "/tmp/grpc.sock";
 const DEFAULT_FDPASS_SOCK_PATH: &str = "/tmp/fdpass.sock";
@@ -80,10 +81,10 @@ impl ProducerSettingsBuilder {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::producer::settings::{
-        DEFAULT_FDPASS_SOCK_PATH, DEFAULT_GRPC_SOCK_PATH,
-        DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_RINGBUF_LEN,
-    };
+    use crate::producer::settings::DEFAULT_FDPASS_SOCK_PATH;
+    use crate::producer::settings::DEFAULT_GRPC_SOCK_PATH;
+    use crate::producer::settings::DEFAULT_HEARTBEAT_INTERVAL;
+    use crate::producer::settings::DEFAULT_RINGBUF_LEN;
 
     #[test]
     fn test_default_settings() {

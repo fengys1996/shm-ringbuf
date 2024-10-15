@@ -1,4 +1,5 @@
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
+use std::time::Duration;
 
 const DEFAULT_GRPC_SOCK_PATH: &str = "/tmp/grpc.sock";
 const DEFAULT_FDPASS_SOCK_PATH: &str = "/tmp/fdpass.sock";
@@ -99,12 +100,11 @@ impl ConsumerSettingsBuilder {
 mod tests {
     use std::time::Duration;
 
-    use crate::consumer::settings::{
-        DEFAULT_FDPASS_SOCK_PATH, DEFAULT_GRPC_SOCK_PATH,
-        DEFAULT_PROCESS_DURATION,
-    };
-
-    use super::{ConsumerSettings, ConsumerSettingsBuilder};
+    use super::ConsumerSettings;
+    use super::ConsumerSettingsBuilder;
+    use crate::consumer::settings::DEFAULT_FDPASS_SOCK_PATH;
+    use crate::consumer::settings::DEFAULT_GRPC_SOCK_PATH;
+    use crate::consumer::settings::DEFAULT_PROCESS_DURATION;
 
     #[test]
     fn test_settings_default() {

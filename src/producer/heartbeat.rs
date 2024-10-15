@@ -5,12 +5,12 @@ use std::time::Duration;
 
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
-
-use crate::error;
-use crate::grpc::client::GrpcClient;
+use tracing::info;
+use tracing::warn;
 
 use super::SessionHandleRef;
+use crate::error;
+use crate::grpc::client::GrpcClient;
 
 /// Heartbeat service is used to keep the connection between the consumer and
 /// the producer.
