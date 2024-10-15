@@ -19,7 +19,7 @@ use crate::error::Result;
 use crate::grpc::client::GrpcClient;
 use crate::grpc::proto::ResultSet;
 
-pub type RequsetId = u32;
+pub type RequestId = u32;
 
 /// The [`ResultFetcher`] has two abilities:
 /// 1. Fetch the results of data processing on the consumer side.
@@ -32,7 +32,7 @@ struct Inner {
     grpc_client: GrpcClient,
     retry_interval: Duration,
     normal: AtomicBool,
-    subscriptions: DashMap<RequsetId, Sender<DataProcessResult>>,
+    subscriptions: DashMap<RequestId, Sender<DataProcessResult>>,
 }
 
 impl ResultFetcher {

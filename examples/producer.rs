@@ -88,11 +88,11 @@ async fn wait_consumer_online(
 ) -> Result<(), String> {
     for _ in 0..retry_num {
         if p.server_online() && p.result_fetch_normal() {
-            info!("consumer online");
+            info!("consumer online and result fetcher normal");
             return Ok(());
         }
 
-        info!("wait consumer online");
+        info!("wait consumer online or wait fetcher normal");
         sleep(retry_interval).await;
     }
 
