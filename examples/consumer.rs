@@ -1,3 +1,4 @@
+use std::str::from_utf8;
 use std::time::Duration;
 
 use shm_ringbuf::consumer::process::DataProcess;
@@ -18,20 +19,18 @@ async fn main() {
         .ringbuf_expire_check_interval(Duration::from_secs(3))
         .build();
 
-    let ringbuf = RingbufConsumer::new(settings);
-    ringbuf.run(PrintStringProcessor).await;
+    RingbufConsumer::new(settings).run(StringPrint).await;
 }
 
-pub struct PrintStringProcessor;
+pub struct StringPrint;
 
-impl DataProcess for PrintStringProcessor {
+impl DataProcess for StringPrint {
     type Error = Error;
 
     fn process(&self, data: &[u8]) -> Result<(), Self::Error> {
-        let print_string =
-            std::str::from_utf8(data).map_err(|_| Error::DecodeError)?;
+        let msg = from_utf8(data).map_err(|_| Error::DecodeError)?;
 
-        info!("receive: {}", print_string);
+        info!("receive: {}", msg);
 
         Ok(())
     }

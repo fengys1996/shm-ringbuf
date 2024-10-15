@@ -54,11 +54,10 @@ impl RingbufConsumer {
     {
         self.start_grpc_server().await;
 
-        self.start_fd_recv_server().await;
+        self.start_fdrecv_server().await;
 
         let interval = self.settings.process_interval;
         let cancel = self.cancel.clone();
-
         self.process_loop(&processor, interval, Some(cancel)).await;
     }
 
@@ -83,7 +82,7 @@ impl RingbufConsumer {
         });
     }
 
-    async fn start_fd_recv_server(&self) {
+    async fn start_fdrecv_server(&self) {
         let cancel = self.cancel.clone();
         let session_manager = self.session_manager.clone();
         let fdpass_sock_path = self.settings.fdpass_sock_path.clone();
@@ -136,11 +135,11 @@ async fn process_all_sessions<P, E>(
     E: Into<DataProcessResult>,
 {
     for (_, session) in session_manager.iter() {
-        process_session(session, processor).await;
+        process_session(&session, processor).await;
     }
 }
 
-async fn process_session<P, E>(session: SessionRef, processor: &P)
+async fn process_session<P, E>(session: &SessionRef, processor: &P)
 where
     P: DataProcess<Error = E>,
     E: Into<DataProcessResult>,

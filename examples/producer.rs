@@ -9,7 +9,6 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() {
-    // 1. Initialize log.
     tracing_subscriber::fmt::init();
 
     let settings = ProducerSettingsBuilder::new()
@@ -20,8 +19,8 @@ async fn main() {
         .build();
 
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
-    let mut joins = Vec::with_capacity(100);
 
+    let mut joins = Vec::with_capacity(100);
     for i in 0..10000 {
         let mut pre_alloc =
             reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
@@ -89,8 +88,11 @@ async fn wait_consumer_online(
 ) -> Result<(), String> {
     for _ in 0..retry_num {
         if p.server_online() && p.result_fetch_normal() {
+            info!("consumer online");
             return Ok(());
         }
+
+        info!("wait consumer online");
         sleep(retry_interval).await;
     }
 

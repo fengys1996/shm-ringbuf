@@ -14,7 +14,6 @@ use std::sync::RwLock;
 use std::time::Duration;
 
 use fetch::ResultFetcher;
-use fetch::ResultFetcherRef;
 use settings::ProducerSettings;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
@@ -34,7 +33,7 @@ pub struct RingbufProducer {
     online: Arc<AtomicBool>,
     cancel: CancellationToken,
     business_id: AtomicU32,
-    result_fetcher: ResultFetcherRef,
+    result_fetcher: ResultFetcher,
 }
 
 impl RingbufProducer {
@@ -78,13 +77,9 @@ impl RingbufProducer {
         let cancel_c = cancel.clone();
         tokio::spawn(async move { heartbeat.run(cancel_c).await });
 
-        let result_fetcher = Arc::new(ResultFetcher::new(
-            grpc_client.clone(),
-            Duration::from_secs(5),
-        ));
-
-        let result_fetch_c = result_fetcher.clone();
-        tokio::spawn(async move { result_fetch_c.run().await });
+        let result_fetcher =
+            ResultFetcher::new(grpc_client.clone(), Duration::from_secs(5))
+                .await;
 
         let producer = RingbufProducer {
             ringbuf,
@@ -103,7 +98,7 @@ impl RingbufProducer {
         let data_block =
             self.ringbuf.write().unwrap().reserve(size, business_id)?;
 
-        let rx = self.result_fetcher.register(business_id);
+        let rx = self.result_fetcher.subscribe(business_id);
 
         let pre = PreAlloc { data_block, rx };
 
