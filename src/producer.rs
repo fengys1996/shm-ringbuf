@@ -11,7 +11,6 @@ use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::time::Duration;
 
 use fetch::ResultFetcher;
 use settings::ProducerSettings;
@@ -45,6 +44,7 @@ impl RingbufProducer {
             ringbuf_len,
             fdpass_sock_path,
             heartbeat_interval,
+            result_fetch_retry_interval,
         } = settings;
 
         let client_id = gen_client_id();
@@ -77,9 +77,11 @@ impl RingbufProducer {
         let cancel_c = cancel.clone();
         tokio::spawn(async move { heartbeat.run(cancel_c).await });
 
-        let result_fetcher =
-            ResultFetcher::new(grpc_client.clone(), Duration::from_secs(5))
-                .await;
+        let result_fetcher = ResultFetcher::new(
+            grpc_client.clone(),
+            result_fetch_retry_interval,
+        )
+        .await;
 
         let producer = RingbufProducer {
             ringbuf,
