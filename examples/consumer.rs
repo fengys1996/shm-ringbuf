@@ -27,7 +27,7 @@ pub struct StringPrint;
 impl DataProcess for StringPrint {
     type Error = Error;
 
-    fn process(&self, data: &[u8]) -> Result<(), Self::Error> {
+    async fn process(&self, data: &[u8]) -> Result<(), Self::Error> {
         let msg = from_utf8(data).map_err(|_| Error::DecodeError)?;
 
         info!("receive: {}", msg);

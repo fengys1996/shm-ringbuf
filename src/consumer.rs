@@ -154,7 +154,7 @@ where
         let data_slice = data_block.slice().unwrap();
         let business_id = data_block.business_id();
 
-        if let Err(e) = processor.process(data_slice) {
+        if let Err(e) = processor.process(data_slice).await {
             session.push_result(business_id, e).await;
         } else {
             session.push_ok(business_id).await;

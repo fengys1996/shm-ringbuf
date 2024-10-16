@@ -56,15 +56,17 @@ impl ResultFetcher {
         };
 
         // Try to fetch the result stream and update the normal flag immediately.
-        let mut may_stream =
-            fetcher.inner.grpc_client.fetch_result().await.ok();
-        if may_stream.is_some() {
-            inner.normal.store(true, Ordering::Relaxed);
-        } else {
+        let may_stream = fetcher.inner.grpc_client.fetch_result().await;
+        if let Err(e) = &may_stream {
+            debug!("failed to fetch result stream, detail: {:?}", e);
             inner.normal.store(false, Ordering::Relaxed);
+        } else {
+            inner.normal.store(true, Ordering::Relaxed);
         }
 
         tokio::spawn(async move {
+            let mut may_stream = may_stream.ok();
+
             loop {
                 if let Some(stream) = may_stream.take() {
                     if let Err(e) = fetcher.handle_stream(stream).await {
