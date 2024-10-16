@@ -1,63 +1,55 @@
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
-use tracing::warn;
+use futures::FutureExt;
+use tokio::sync::oneshot::Receiver;
 
+use crate::error::DataProcessResult;
 use crate::error::Result;
-use crate::grpc::client::GrpcClient;
 use crate::ringbuf::data_block::DataBlock;
 use crate::ringbuf::DropGuard;
-use crate::ringbuf::Ringbuf;
 
-pub struct PreAlloc<'a> {
-    pub(super) inner: DataBlock<DropGuard>,
-    pub(super) notify: &'a GrpcClient,
-    pub(super) online: &'a Arc<AtomicBool>,
-    pub(super) ringbuf: &'a RwLock<Ringbuf>,
+pub struct PreAlloc {
+    pub(super) data_block: DataBlock<DropGuard>,
+    pub(super) rx: Receiver<DataProcessResult>,
 }
 
-impl<'a> PreAlloc<'a> {
+impl PreAlloc {
     /// Get the slice of the pre-allocated.
     pub fn slice(&self) -> &[u8] {
-        self.inner.slice().unwrap()
+        self.data_block.slice().unwrap()
     }
 
     /// Write data to the pre-allocated.
     pub fn write(&mut self, data: &[u8]) -> Result<()> {
-        self.inner.write(data)
+        self.data_block.write(data)
     }
 
     /// Commit the written data.
     ///
     /// After commit, the consumer can see the written data.
     pub fn commit(&self) {
-        self.inner.commit();
+        self.data_block.commit();
     }
 
-    /// Commit the written data and notify the consumer.
-    ///
-    /// After commit, the consumer can see the written data.
-    pub async fn commit_and_notify(self, notify_limit: u32) {
-        self.inner.commit();
-
-        let need_notify =
-            self.ringbuf.read().unwrap().written_bytes() > notify_limit;
-
-        if !need_notify {
-            return;
-        }
-
-        if let Err(e) = self.notify.notify().await {
-            warn!("failed to notify consumer, error: {:?}", e);
-            // TODO: elegant settings online.
-            self.online.store(false, Ordering::Relaxed);
-        }
+    pub fn wait_result(self) -> Handle {
+        Handle { rx: self.rx }
     }
+}
 
-    /// Check if the server is online.
-    pub fn online(&self) -> bool {
-        self.online.load(Ordering::Relaxed)
+pub struct Handle {
+    rx: Receiver<DataProcessResult>,
+}
+
+impl Future for Handle {
+    type Output = std::result::Result<DataProcessResult, ()>;
+
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Self::Output> {
+        self.rx.poll_unpin(cx).map(|res| res.map_err(|_| ()))
     }
 }

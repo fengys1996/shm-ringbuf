@@ -1,8 +1,10 @@
+use std::str::from_utf8;
 use std::time::Duration;
 
-use shm_ringbuf::consumer::decode::ToStringDecoder;
+use shm_ringbuf::consumer::process::DataProcess;
 use shm_ringbuf::consumer::settings::ConsumerSettingsBuilder;
 use shm_ringbuf::consumer::RingbufConsumer;
+use shm_ringbuf::error::DataProcessResult;
 use tracing::info;
 
 #[tokio::main]
@@ -17,10 +19,50 @@ async fn main() {
         .ringbuf_expire_check_interval(Duration::from_secs(3))
         .build();
 
-    let decoder = ToStringDecoder;
-    let mut item_recv = RingbufConsumer::start_consume(settings, decoder).await;
+    RingbufConsumer::new(settings).run(StringPrint).await;
+}
 
-    while let Some(item) = item_recv.recv().await {
-        info!("{:?}", item);
+pub struct StringPrint;
+
+impl DataProcess for StringPrint {
+    type Error = Error;
+
+    async fn process(&self, data: &[u8]) -> Result<(), Self::Error> {
+        let msg = from_utf8(data).map_err(|_| Error::DecodeError)?;
+
+        info!("receive: {}", msg);
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    DecodeError,
+    ProcessError,
+}
+
+impl Error {
+    pub fn status_code(&self) -> u32 {
+        match self {
+            Error::DecodeError => 1001,
+            Error::ProcessError => 1002,
+        }
+    }
+
+    pub fn message(&self) -> String {
+        match self {
+            Error::DecodeError => "decode error".to_string(),
+            Error::ProcessError => "process error".to_string(),
+        }
+    }
+}
+
+impl From<Error> for DataProcessResult {
+    fn from(err: Error) -> DataProcessResult {
+        DataProcessResult {
+            status_code: err.status_code(),
+            message: err.message(),
+        }
     }
 }

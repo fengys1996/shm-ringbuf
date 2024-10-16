@@ -1,16 +1,21 @@
-mod heartbeat;
 pub mod prealloc;
 pub mod settings;
+
+mod fetch;
+mod heartbeat;
 
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+use fetch::ResultFetcher;
 use settings::ProducerSettings;
 use tokio_util::sync::CancellationToken;
+use tracing::debug;
 use uuid::Uuid;
 
 use self::prealloc::PreAlloc;
@@ -26,6 +31,8 @@ pub struct RingbufProducer {
     grpc_client: GrpcClient,
     online: Arc<AtomicBool>,
     cancel: CancellationToken,
+    business_id: AtomicU32,
+    result_fetcher: ResultFetcher,
 }
 
 impl RingbufProducer {
@@ -37,6 +44,7 @@ impl RingbufProducer {
             ringbuf_len,
             fdpass_sock_path,
             heartbeat_interval,
+            result_fetch_retry_interval,
         } = settings;
 
         let client_id = gen_client_id();
@@ -49,6 +57,7 @@ impl RingbufProducer {
         let grpc_client = GrpcClient::new(&client_id, grpc_sock_path);
         let ringbuf = RwLock::new(Ringbuf::new(&memfd, ringbuf_len)?);
         let online = Arc::new(AtomicBool::new(false));
+        let business_id = AtomicU32::new(0);
         let cancel = CancellationToken::new();
 
         let session_handle = SessionHandle {
@@ -68,32 +77,65 @@ impl RingbufProducer {
         let cancel_c = cancel.clone();
         tokio::spawn(async move { heartbeat.run(cancel_c).await });
 
+        let result_fetcher = ResultFetcher::new(
+            grpc_client.clone(),
+            result_fetch_retry_interval,
+        )
+        .await;
+
         let producer = RingbufProducer {
             ringbuf,
             grpc_client,
             online,
             cancel,
+            business_id,
+            result_fetcher,
         };
 
         Ok(producer)
     }
 
     pub fn reserve(&self, size: usize) -> Result<PreAlloc> {
-        let data_block = self.ringbuf.write().unwrap().reserve(size)?;
+        let business_id = self.gen_business_id();
+        let data_block =
+            self.ringbuf.write().unwrap().reserve(size, business_id)?;
 
-        let pre = PreAlloc {
-            inner: data_block,
-            notify: &self.grpc_client,
-            online: &self.online,
-            ringbuf: &self.ringbuf,
-        };
+        let rx = self.result_fetcher.subscribe(business_id);
+
+        let pre = PreAlloc { data_block, rx };
 
         Ok(pre)
+    }
+
+    pub async fn notify_consumer(&self, notify_limit: Option<u32>) {
+        let need_notify = notify_limit.map_or(true, |limit| {
+            self.ringbuf.read().unwrap().written_bytes() > limit
+        });
+
+        if !need_notify {
+            debug!("no need to notify consumer");
+            return;
+        }
+
+        if let Err(e) = self.grpc_client.notify().await {
+            debug!("failed to notify consumer, error: {:?}", e);
+            self.online.store(false, Ordering::Relaxed);
+        }
     }
 
     /// Check if the server is online.
     pub fn server_online(&self) -> bool {
         self.online.load(Ordering::Relaxed)
+    }
+
+    /// Check if the result fetcher is normal.
+    pub fn result_fetch_normal(&self) -> bool {
+        self.result_fetcher.is_normal()
+    }
+
+    /// Generate a business id.
+    fn gen_business_id(&self) -> u32 {
+        self.business_id.fetch_add(1, Ordering::Relaxed)
     }
 }
 

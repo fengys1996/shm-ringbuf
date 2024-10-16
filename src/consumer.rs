@@ -1,113 +1,113 @@
-pub mod decode;
-pub(crate) mod session_manager;
+pub mod process;
 pub mod settings;
 
+pub(crate) mod session_manager;
+
 use std::fmt::Debug;
-use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::time::Duration;
 
+use process::DataProcess;
 use session_manager::SessionManager;
 use session_manager::SessionManagerRef;
+use session_manager::SessionRef;
 use settings::ConsumerSettings;
-use tokio::sync::mpsc::channel;
-use tokio::sync::mpsc::Receiver;
-use tokio::sync::mpsc::Sender;
 use tokio::sync::Notify;
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-use self::decode::Context;
-use self::decode::Decode;
+use crate::error::DataProcessResult;
 use crate::fd_pass::FdRecvServer;
 use crate::grpc::server::ShmCtlServer;
-use crate::ringbuf::Ringbuf;
 
-pub struct RingbufConsumer<D, Item, E> {
+pub struct RingbufConsumer {
     session_manager: SessionManagerRef,
-    sender: Sender<StdResult<Item, E>>,
-    decoder: D,
     notify: Arc<Notify>,
+    settings: ConsumerSettings,
     cancel: CancellationToken,
 }
 
-impl<D, Item, E> RingbufConsumer<D, Item, E>
-where
-    D: Decode<Item = Item, Error = E> + 'static,
-    Item: Send + Sync + 'static,
-    E: Debug + Send + 'static,
-{
-    pub async fn start_consume(
-        settings: ConsumerSettings,
-        decoder: D,
-    ) -> Receiver<StdResult<Item, E>> {
+impl RingbufConsumer {
+    pub fn new(settings: ConsumerSettings) -> Self {
         let session_manager = Arc::new(SessionManager::new(
             settings.max_session_capacity,
             settings.session_tti,
         ));
 
-        let (send, recv) = channel(1024);
-
         let notify = Arc::new(Notify::new());
 
-        let cancel_token = CancellationToken::new();
+        let cancel = CancellationToken::new();
 
-        let consumer = RingbufConsumer {
+        RingbufConsumer {
             session_manager,
-            decoder,
-            sender: send,
-            notify: notify.clone(),
-            cancel: cancel_token.clone(),
-        };
-
-        let session_manager = consumer.session_manager.clone();
-        let cancel_token_clone = cancel_token.clone();
-
-        // 1. start the server to receive the fd.
-        tokio::spawn(async move {
-            let mut server = FdRecvServer::with_shutdown(
-                settings.fdpass_sock_path,
-                session_manager,
-                Some(cancel_token_clone.cancelled()),
-            );
-            server.run().await.unwrap();
-        });
-
-        let session_manager = consumer.session_manager.clone();
-        let cancel_token_clone = cancel_token.clone();
-
-        // 2. start the server to receive the control message.
-        tokio::spawn(async move {
-            let mut server = ShmCtlServer::with_shutdown(
-                settings.grpc_sock_path,
-                notify,
-                session_manager,
-                Some(cancel_token_clone.cancelled()),
-            );
-            server.run().await.unwrap();
-        });
-
-        let process_duration = settings.process_interval;
-        let cancel_token_clone = cancel_token.clone();
-
-        // 3. start the consumer loop.
-        tokio::spawn(async move {
-            consumer
-                .process_loop(process_duration, Some(cancel_token_clone))
-                .await;
-        });
-
-        recv
+            notify,
+            cancel,
+            settings,
+        }
     }
 
-    pub async fn process_loop(
-        mut self,
+    pub async fn run<P, E>(&self, processor: P)
+    where
+        P: DataProcess<Error = E>,
+        E: Into<DataProcessResult> + Debug + Send,
+    {
+        self.start_grpc_server().await;
+
+        self.start_fdrecv_server().await;
+
+        let interval = self.settings.process_interval;
+        let cancel = self.cancel.clone();
+        self.process_loop(&processor, interval, Some(cancel)).await;
+    }
+
+    pub fn cancel(&self) {
+        self.cancel.cancel();
+    }
+
+    async fn start_grpc_server(&self) {
+        let cancel = self.cancel.clone();
+        let notify = self.notify.clone();
+        let session_manager = self.session_manager.clone();
+        let grpc_sock_path = self.settings.grpc_sock_path.clone();
+
+        tokio::spawn(async move {
+            let mut server = ShmCtlServer::with_shutdown(
+                grpc_sock_path,
+                notify,
+                session_manager,
+                Some(cancel.cancelled()),
+            );
+            server.run().await.unwrap();
+        });
+    }
+
+    async fn start_fdrecv_server(&self) {
+        let cancel = self.cancel.clone();
+        let session_manager = self.session_manager.clone();
+        let fdpass_sock_path = self.settings.fdpass_sock_path.clone();
+
+        tokio::spawn(async move {
+            let mut server = FdRecvServer::with_shutdown(
+                fdpass_sock_path,
+                session_manager,
+                Some(cancel.cancelled()),
+            );
+            server.run().await.unwrap();
+        });
+    }
+
+    pub async fn process_loop<P, E>(
+        &self,
+        processor: &P,
         interval: Duration,
         cancel: Option<CancellationToken>,
-    ) {
+    ) where
+        P: DataProcess<Error = E>,
+        E: Into<DataProcessResult> + Debug + Send,
+    {
         loop {
-            self.process_ringbufs().await;
+            process_all_sessions(&self.session_manager, processor).await;
             if let Some(cancel) = &cancel {
                 tokio::select! {
                     _ = self.notify.notified() => {}
@@ -125,33 +125,41 @@ where
             }
         }
     }
+}
 
-    async fn process_ringbufs(&mut self) {
-        for (_, session) in self.session_manager.iter() {
-            self.process_ringbuf(session.ringbuf()).await;
-        }
-    }
-
-    async fn process_ringbuf(&self, ringbuf: &Ringbuf) {
-        while let Some(data_block) = ringbuf.peek() {
-            if data_block.is_busy() {
-                break;
-            }
-
-            let item =
-                self.decoder.decode(data_block.slice().unwrap(), Context {});
-            if let Err(e) = self.sender.send(item).await {
-                warn!("item recv is dropped, trigger server shutdown, detail: {:?}", e);
-                self.cancel.cancel();
-                break;
-            }
-            unsafe { ringbuf.advance_consume_offset(data_block.total_len()) }
-        }
+async fn process_all_sessions<P, E>(
+    session_manager: &SessionManagerRef,
+    processor: &P,
+) where
+    P: DataProcess<Error = E>,
+    E: Into<DataProcessResult>,
+{
+    for (_, session) in session_manager.iter() {
+        process_session(&session, processor).await;
     }
 }
 
-impl<D, Item, E> Drop for RingbufConsumer<D, Item, E> {
-    fn drop(&mut self) {
-        self.cancel.cancel();
+async fn process_session<P, E>(session: &SessionRef, processor: &P)
+where
+    P: DataProcess<Error = E>,
+    E: Into<DataProcessResult>,
+{
+    let ringbuf = session.ringbuf();
+
+    while let Some(data_block) = ringbuf.peek() {
+        if data_block.is_busy() {
+            break;
+        }
+
+        let data_slice = data_block.slice().unwrap();
+        let business_id = data_block.business_id();
+
+        if let Err(e) = processor.process(data_slice).await {
+            session.push_result(business_id, e).await;
+        } else {
+            session.push_ok(business_id).await;
+        }
+
+        unsafe { ringbuf.advance_consume_offset(data_block.total_len()) }
     }
 }

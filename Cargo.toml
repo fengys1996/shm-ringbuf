@@ -10,6 +10,7 @@ benchmark = []
 [dependencies]
 async-trait = { version = "0.1" }
 dashmap = { version = "6.1" }
+futures = { version = "0.3" }
 hyper-util = { version = "0.1" }
 moka = { version = "0.12", features = ["sync"] }
 nix = { version = "0.29", features = ["mman", "fs"] }

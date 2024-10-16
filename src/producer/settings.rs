@@ -1,9 +1,11 @@
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
+use std::time::Duration;
 
 const DEFAULT_GRPC_SOCK_PATH: &str = "/tmp/grpc.sock";
 const DEFAULT_FDPASS_SOCK_PATH: &str = "/tmp/fdpass.sock";
 const DEFAULT_RINGBUF_LEN: usize = 1024 * 1024;
 const DEFAULT_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+const DEFAULT_RESULT_FETCH_RETRY_INTERVAL: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone)]
 pub struct ProducerSettings {
@@ -11,6 +13,7 @@ pub struct ProducerSettings {
     pub(super) fdpass_sock_path: PathBuf,
     pub(super) ringbuf_len: usize,
     pub(super) heartbeat_interval: Duration,
+    pub(super) result_fetch_retry_interval: Duration,
 }
 
 #[derive(Default)]
@@ -19,6 +22,7 @@ pub struct ProducerSettingsBuilder {
     fdpass_sock_path: Option<PathBuf>,
     ringbuf_len: Option<usize>,
     heartbeat_interval: Option<Duration>,
+    result_fetch_retry_interval: Option<Duration>,
 }
 
 impl ProducerSettingsBuilder {
@@ -52,6 +56,12 @@ impl ProducerSettingsBuilder {
         self
     }
 
+    /// Set the interval for retrying to fetch the result.
+    pub fn result_fetch_retry_interval(mut self, interval: Duration) -> Self {
+        self.result_fetch_retry_interval = Some(interval);
+        self
+    }
+
     pub fn build(self) -> ProducerSettings {
         let grpc_sock_path = self
             .grpc_sock_path
@@ -67,11 +77,16 @@ impl ProducerSettingsBuilder {
             .heartbeat_interval
             .unwrap_or(DEFAULT_HEARTBEAT_INTERVAL);
 
+        let result_fetch_retry_interval = self
+            .result_fetch_retry_interval
+            .unwrap_or(DEFAULT_RESULT_FETCH_RETRY_INTERVAL);
+
         ProducerSettings {
             grpc_sock_path,
             fdpass_sock_path,
             ringbuf_len,
             heartbeat_interval,
+            result_fetch_retry_interval,
         }
     }
 }
@@ -80,10 +95,10 @@ impl ProducerSettingsBuilder {
 mod tests {
     use std::path::PathBuf;
 
-    use crate::producer::settings::{
-        DEFAULT_FDPASS_SOCK_PATH, DEFAULT_GRPC_SOCK_PATH,
-        DEFAULT_HEARTBEAT_INTERVAL, DEFAULT_RINGBUF_LEN,
-    };
+    use crate::producer::settings::DEFAULT_FDPASS_SOCK_PATH;
+    use crate::producer::settings::DEFAULT_GRPC_SOCK_PATH;
+    use crate::producer::settings::DEFAULT_HEARTBEAT_INTERVAL;
+    use crate::producer::settings::DEFAULT_RINGBUF_LEN;
 
     #[test]
     fn test_default_settings() {

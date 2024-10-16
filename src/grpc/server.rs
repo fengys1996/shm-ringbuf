@@ -1,14 +1,21 @@
 use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
+use std::result::Result as StdResult;
 use std::sync::Arc;
 
+use futures::Stream;
 use snafu::ResultExt;
 use tokio::fs;
 use tokio::net::UnixListener;
+use tokio::sync::mpsc::channel;
 use tokio::sync::Notify;
+use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::Server;
 use tonic::Request;
+use tonic::Response;
+use tonic::Status;
 use tracing::info;
 use tracing::warn;
 
@@ -96,24 +103,20 @@ impl ShmControl for ShmCtlHandler {
     async fn notify(
         &self,
         request: Request<NotifyRequest>,
-    ) -> std::result::Result<
-        tonic::Response<proto::NotifyResponse>,
-        tonic::Status,
-    > {
+    ) -> StdResult<Response<proto::NotifyResponse>, Status> {
         let NotifyRequest { producer_id: _ } = request.into_inner();
 
         self.notify.notify_one();
 
         let resp = proto::NotifyResponse {};
 
-        Ok(tonic::Response::new(resp))
+        Ok(Response::new(resp))
     }
 
     async fn ping(
         &self,
         request: Request<PingRequest>,
-    ) -> std::result::Result<tonic::Response<proto::PingResponse>, tonic::Status>
-    {
+    ) -> StdResult<Response<proto::PingResponse>, Status> {
         let PingRequest { producer_id } = request.into_inner();
 
         if self.session_manager.get(&producer_id).is_none() {
@@ -122,7 +125,7 @@ impl ShmControl for ShmCtlHandler {
                 status_message: "ringbuf was not found".to_string(),
             };
 
-            return Ok(tonic::Response::new(resp));
+            return Ok(Response::new(resp));
         }
 
         let resp = proto::PingResponse {
@@ -130,7 +133,32 @@ impl ShmControl for ShmCtlHandler {
             status_message: "".to_string(),
         };
 
-        Ok(tonic::Response::new(resp))
+        Ok(Response::new(resp))
+    }
+
+    type FetchResultStream = Pin<
+        Box<
+            dyn Stream<Item = StdResult<proto::ResultSet, Status>>
+                + Send
+                + Sync,
+        >,
+    >;
+
+    async fn fetch_result(
+        &self,
+        request: Request<proto::FetchResultRequest>,
+    ) -> StdResult<Response<Self::FetchResultStream>, Status> {
+        let req = request.into_inner();
+        let producer_id = req.producer_id;
+
+        let (tx, rx) = channel::<StdResult<proto::ResultSet, Status>>(1024);
+
+        self.session_manager.set_result_sender(&producer_id, tx);
+
+        let output_stream = ReceiverStream::new(rx);
+        Ok(Response::new(
+            Box::pin(output_stream) as Self::FetchResultStream
+        ))
     }
 }
 

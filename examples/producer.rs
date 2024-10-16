@@ -9,7 +9,6 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() {
-    // 1. Initialize log.
     tracing_subscriber::fmt::init();
 
     let settings = ProducerSettingsBuilder::new()
@@ -21,6 +20,7 @@ async fn main() {
 
     let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
 
+    let mut joins = Vec::with_capacity(100);
     for i in 0..10000 {
         let mut pre_alloc =
             reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
@@ -30,7 +30,7 @@ async fn main() {
         let write_str = format!("hello, {}", i);
         info!("write: {}", write_str);
 
-        wait_consumer_online(&pre_alloc, 20 * 5, Duration::from_secs(3))
+        wait_consumer_online(&producer, 20 * 5, Duration::from_secs(3))
             .await
             .unwrap();
 
@@ -38,9 +38,23 @@ async fn main() {
 
         pre_alloc.commit();
 
+        let join = pre_alloc.wait_result();
+
+        joins.push(join);
+
         if i % 100 == 0 {
-            sleep(Duration::from_millis(10)).await;
+            for j in joins.drain(..) {
+                let _ = j.await;
+            }
         }
+
+        if i % 10 == 0 {
+            sleep(Duration::from_millis(1000)).await;
+        }
+    }
+
+    for j in joins {
+        let _ = j.await;
     }
 }
 
@@ -68,14 +82,17 @@ async fn reserve_with_retry(
 }
 
 async fn wait_consumer_online(
-    pre_alloc: &PreAlloc<'_>,
+    p: &RingbufProducer,
     retry_num: usize,
     retry_interval: Duration,
 ) -> Result<(), String> {
     for _ in 0..retry_num {
-        if pre_alloc.online() {
+        if p.server_online() && p.result_fetch_normal() {
+            info!("consumer online and result fetcher normal");
             return Ok(());
         }
+
+        info!("wait consumer online or wait fetcher normal");
         sleep(retry_interval).await;
     }
 

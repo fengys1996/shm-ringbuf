@@ -49,7 +49,7 @@ async fn write_msg(producer: Arc<RingbufProducer>, range: Range<usize>) {
         let write_str = format!("hello, {}", i);
         info!("write: {}", write_str);
 
-        wait_consumer_online(&pre_alloc, 20 * 5, Duration::from_secs(3))
+        wait_consumer_online(&producer, 20 * 5, Duration::from_secs(3))
             .await
             .unwrap();
 
@@ -87,14 +87,17 @@ async fn reserve_with_retry(
 }
 
 async fn wait_consumer_online(
-    pre_alloc: &PreAlloc<'_>,
+    p: &RingbufProducer,
     retry_num: usize,
     retry_interval: Duration,
 ) -> Result<(), String> {
     for _ in 0..retry_num {
-        if pre_alloc.online() {
+        if p.server_online() && p.result_fetch_normal() {
+            info!("consumer online and result fetcher normal");
             return Ok(());
         }
+
+        info!("wait consumer online or wait result fetcher normal");
         sleep(retry_interval).await;
     }
 
