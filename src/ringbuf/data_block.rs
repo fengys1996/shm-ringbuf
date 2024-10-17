@@ -234,7 +234,7 @@ impl Header {
         let ptr = self.busy_ptr;
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
 
-        atomic.load(Ordering::Relaxed) == 1
+        atomic.load(Ordering::Acquire) == 1
     }
 
     fn set_busy(&self, busy: bool) {
@@ -242,9 +242,9 @@ impl Header {
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
 
         if busy {
-            atomic.store(1, Ordering::Relaxed);
+            atomic.store(1, Ordering::Release);
         } else {
-            atomic.store(0, Ordering::Relaxed);
+            atomic.store(0, Ordering::Release);
         }
     }
 

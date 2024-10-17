@@ -294,7 +294,7 @@ impl Ringbuf {
         let ptr = self.metadata.consume_offset_ptr;
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.load(Ordering::Relaxed)
+        atomic.load(Ordering::Acquire)
     }
 
     /// Get the produce offset which is the next write position in ringbuf.
@@ -304,7 +304,7 @@ impl Ringbuf {
         let ptr = self.metadata.produce_offset_ptr;
 
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-        atomic.load(Ordering::Relaxed)
+        atomic.load(Ordering::Acquire)
     }
 
     /// Set the consume offset which is the next read position in ringbuf.
@@ -337,7 +337,7 @@ impl Ringbuf {
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
 
         let _ =
-            atomic.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pre| {
+            atomic.fetch_update(Ordering::Release, Ordering::Acquire, |pre| {
                 Some((pre + len) % self.data_part_len as u32)
             });
     }
@@ -352,7 +352,7 @@ impl Ringbuf {
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
 
         let _ =
-            atomic.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |pre| {
+            atomic.fetch_update(Ordering::Release, Ordering::Acquire, |pre| {
                 Some((pre + len) % self.data_part_len as u32)
             });
     }
