@@ -27,8 +27,6 @@ async fn test_ringbuf_spsc() {
         .grpc_sock_path(grpc_sock_path.clone())
         .fdpass_sock_path(fdpass_sock_path.clone())
         .process_interval(Duration::from_millis(10))
-        .ringbuf_expire(Duration::from_secs(10))
-        .ringbuf_expire_check_interval(Duration::from_secs(3))
         .build();
 
     tokio::spawn(async move {
