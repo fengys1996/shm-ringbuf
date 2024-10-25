@@ -15,8 +15,6 @@ async fn main() {
         .grpc_sock_path("/tmp/ctl.sock")
         .fdpass_sock_path("/tmp/fd.sock")
         .process_interval(Duration::from_millis(10))
-        .ringbuf_expire(Duration::from_secs(10))
-        .ringbuf_expire_check_interval(Duration::from_secs(3))
         .build();
 
     RingbufConsumer::new(settings).run(StringPrint).await;

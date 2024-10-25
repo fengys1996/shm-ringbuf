@@ -19,8 +19,6 @@ pub struct ConsumerSettingsBuilder {
     grpc_sock_path: Option<PathBuf>,
     fdpass_sock_path: Option<PathBuf>,
     process_duration: Option<Duration>,
-    ringbuf_expire: Option<Duration>,
-    ringbuf_check_interval: Option<Duration>,
     max_session_capacity: Option<u64>,
     session_tti: Option<Duration>,
 }
@@ -49,24 +47,12 @@ impl ConsumerSettingsBuilder {
         self
     }
 
-    /// Set the ringbuf expire duration.
-    pub fn ringbuf_expire(mut self, duration: Duration) -> Self {
-        self.ringbuf_expire = Some(duration);
-        self
-    }
-
-    /// Set the ringbuf expire check interval.
-    pub fn ringbuf_expire_check_interval(mut self, duration: Duration) -> Self {
-        self.ringbuf_check_interval = Some(duration);
-        self
-    }
-
     pub fn max_session_capacity(mut self, capacity: u64) -> Self {
         self.max_session_capacity = Some(capacity);
         self
     }
 
-    pub fn session_ttl(mut self, ttl: Duration) -> Self {
+    pub fn session_tti(mut self, ttl: Duration) -> Self {
         self.session_tti = Some(ttl);
         self
     }
@@ -131,10 +117,8 @@ mod tests {
             .grpc_sock_path("/tmp/grpc_test.sock")
             .fdpass_sock_path("/tmp/fd_test.sock")
             .process_interval(Duration::from_millis(100))
-            .ringbuf_expire(Duration::from_secs(20))
-            .ringbuf_expire_check_interval(Duration::from_secs(6))
             .max_session_capacity(20)
-            .session_ttl(Duration::from_secs(30))
+            .session_tti(Duration::from_secs(30))
             .build();
 
         let ConsumerSettings {
