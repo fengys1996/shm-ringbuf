@@ -44,7 +44,8 @@ pub fn memfd_create(settings: MemfdSettings) -> Result<fs::File> {
     {
         let MemfdSettings { name, size } = settings;
 
-        let base_path = String::from("/tmp/shm/");
+        let base_path =
+            std::env::var("SHM_PATH").unwrap_or("/tmp/shm/".to_string());
         let path = base_path + &name;
         // Checking if the directory exists and creating if not
         if let Some(parent_dir) = std::path::Path::new(&path).parent() {
@@ -64,7 +65,7 @@ pub fn memfd_create(settings: MemfdSettings) -> Result<fs::File> {
         // In order to reduce the writing to the disk, we can delete the file immediately, why?
         // Refer to: https://stackoverflow.com/questions/39779517/does-mac-os-have-a-way-to-create-an-anonymous-file-mapping
         // But we are only developing on macOS and will not use macOS as a production environment. So we will comment out the following.
-        // fs::remove_file(path).context(error::IoSnafu)?;
+        fs::remove_file(path).context(error::IoSnafu)?;
 
         let raw_fd = owned_fd.into_raw_fd();
 
