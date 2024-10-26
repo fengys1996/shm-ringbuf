@@ -3,6 +3,9 @@ use std::fs;
 use std::os::fd::FromRawFd;
 use std::os::fd::IntoRawFd;
 
+use nix::fcntl::fcntl;
+use nix::fcntl::FcntlArg;
+use nix::fcntl::SealFlag;
 use nix::sys::memfd;
 use snafu::ResultExt;
 
@@ -24,7 +27,8 @@ pub fn memfd_create(settings: MemfdSettings) -> Result<fs::File> {
 
     let c_name = CString::new(name.clone()).context(error::NulZeroSnafu)?;
 
-    let flags = memfd::MemFdCreateFlag::MFD_CLOEXEC;
+    let flags = memfd::MemFdCreateFlag::MFD_CLOEXEC
+        | memfd::MemFdCreateFlag::MFD_ALLOW_SEALING;
 
     let owned_fd = memfd::memfd_create(&c_name, flags)
         .context(error::MemFdSnafu { fd_name: name })?;
@@ -34,7 +38,16 @@ pub fn memfd_create(settings: MemfdSettings) -> Result<fs::File> {
     let file = unsafe { fs::File::from_raw_fd(raw_fd) };
     file.set_len(size).context(error::IoSnafu)?;
 
+    disable_shrink_or_grow(raw_fd)?;
+
     Ok(file)
+}
+
+fn disable_shrink_or_grow(fd: i32) -> Result<()> {
+    let seal_flag = SealFlag::F_SEAL_GROW | SealFlag::F_SEAL_SHRINK;
+    let fcntl_arg = FcntlArg::F_ADD_SEALS(seal_flag);
+    fcntl(fd, fcntl_arg).context(error::FcntlSnafu)?;
+    Ok(())
 }
 
 #[cfg(test)]

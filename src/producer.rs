@@ -55,14 +55,13 @@ impl RingbufProducer {
         })?;
 
         let grpc_client = GrpcClient::new(&client_id, grpc_sock_path);
-        let ringbuf = RwLock::new(Ringbuf::new(&memfd, ringbuf_len)?);
+        let ringbuf = RwLock::new(Ringbuf::new(&memfd)?);
         let online = Arc::new(AtomicBool::new(false));
         let business_id = AtomicU32::new(0);
         let cancel = CancellationToken::new();
 
         let session_handle = SessionHandle {
             client_id,
-            ringbuf_len,
             fdpass_sock_path,
             memfd,
         };
@@ -149,7 +148,6 @@ impl Drop for RingbufProducer {
 /// to the consumer.
 pub struct SessionHandle {
     pub client_id: String,
-    pub ringbuf_len: usize,
     pub fdpass_sock_path: PathBuf,
     pub memfd: File,
 }
@@ -158,13 +156,8 @@ pub type SessionHandleRef = Arc<SessionHandle>;
 
 impl SessionHandle {
     pub async fn send(&self) -> Result<()> {
-        send_fd(
-            &self.fdpass_sock_path,
-            &self.memfd,
-            self.client_id.clone(),
-            self.ringbuf_len as u32,
-        )
-        .await
+        send_fd(&self.fdpass_sock_path, &self.memfd, self.client_id.clone())
+            .await
     }
 }
 
