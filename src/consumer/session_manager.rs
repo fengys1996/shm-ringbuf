@@ -112,7 +112,7 @@ impl SessionManager {
         self.sessions.insert(key.into(), session);
     }
 
-    /// Get a session from the session manager and refresh the ttl.
+    /// Get a session from the session manager and refresh the tti.
     pub fn get(&self, key: &ClientId) -> Option<SessionRef> {
         self.sessions.get(key)
     }

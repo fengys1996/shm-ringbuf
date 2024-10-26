@@ -151,23 +151,20 @@ impl Handler {
 
         let client_id = String::from_utf8(buf).context(error::FromUtf8Snafu)?;
 
-        // 3. Read the length of ringbuf.
-        let len_of_ringbuf = stream.read_u32().await.context(error::IoSnafu)?;
-
-        // 4. Log the client id and the length of client id.
-        info!(
-            "recv a client id: {}, the len of client id: {}, the len of ringbuf: {}",
-            client_id, len_of_id, len_of_ringbuf
-        );
-
-        // 5. Recv the fd.
+        // 3. Recv the fd.
         let fd = stream.recv_fd().await.context(error::IoSnafu)?;
         let file = unsafe { File::from_raw_fd(fd) };
 
-        // 6. Create the ringbuf.
-        let ringbuf = Ringbuf::from(&file, len_of_ringbuf as usize)?;
+        // 4. Log the client id and the length of client id.
+        info!(
+            "recv a client id: {}, the len of client id: {}",
+            client_id, len_of_id
+        );
 
-        // 7. Store the ringbuf to ringbuf store.
+        // 5. Create the ringbuf.
+        let ringbuf = Ringbuf::from(&file)?;
+
+        // 6. Store the ringbuf to ringbuf store.
         let session = Arc::new(Session::new(ringbuf));
         self.session_manager.insert(client_id, session);
 
@@ -209,7 +206,6 @@ pub async fn send_fd(
     sock_path: impl AsRef<Path>,
     file: &File,
     name: impl Into<String>,
-    len_of_ringbuf: u32,
 ) -> Result<()> {
     let mut stream = UnixStream::connect(sock_path.as_ref())
         .await
@@ -223,11 +219,6 @@ pub async fn send_fd(
         .await
         .context(error::IoSnafu)?;
     stream.write_all(name).await.context(error::IoSnafu)?;
-
-    stream
-        .write_u32(len_of_ringbuf)
-        .await
-        .context(error::IoSnafu)?;
 
     stream
         .send_fd(file.as_raw_fd())
@@ -246,6 +237,7 @@ mod tests {
     use super::send_fd;
     use crate::consumer::session_manager::SessionManager;
     use crate::fd_pass::FdRecvServer;
+    use crate::ringbuf::page_align_size;
 
     #[tokio::test]
     async fn test_fd_pass() {
@@ -279,9 +271,9 @@ mod tests {
             let path_c = path.clone();
             let join = tokio::spawn(async move {
                 let file = tempfile::tempfile().unwrap();
+                file.set_len(page_align_size(10240)).unwrap();
                 let client_id = format!("client_id_{}", i);
-
-                send_fd(path_c, &file, client_id, 1024).await.unwrap();
+                send_fd(path_c, &file, client_id).await.unwrap();
             });
             joins.push(join);
         }

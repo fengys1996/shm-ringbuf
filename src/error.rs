@@ -62,6 +62,13 @@ pub enum Error {
         location: Location,
     },
 
+    #[snafu(display("Failed to fcntl"))]
+    Fcntl {
+        source: nix::Error,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
     #[snafu(display("Tonic error"))]
     Tonic {
         source: tonic::Status,
