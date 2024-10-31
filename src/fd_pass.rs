@@ -237,10 +237,12 @@ mod tests {
     use super::send_fd;
     use crate::consumer::session_manager::SessionManager;
     use crate::fd_pass::FdRecvServer;
-    use crate::ringbuf::page_align_size;
+    use crate::ringbuf::min_ringbuf_len;
 
     #[tokio::test]
     async fn test_fd_pass() {
+        tracing_subscriber::fmt::init();
+
         let session_manager =
             Arc::new(SessionManager::new(200, Duration::from_secs(10)));
 
@@ -271,7 +273,7 @@ mod tests {
             let path_c = path.clone();
             let join = tokio::spawn(async move {
                 let file = tempfile::tempfile().unwrap();
-                file.set_len(page_align_size(10240)).unwrap();
+                file.set_len(min_ringbuf_len()).unwrap();
                 let client_id = format!("client_id_{}", i);
                 send_fd(path_c, &file, client_id).await.unwrap();
             });
