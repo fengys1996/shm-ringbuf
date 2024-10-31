@@ -68,7 +68,7 @@ impl RingbufConsumer {
         self.process_loop(&processor, interval, Some(cancel)).await;
     }
 
-    pub async fn detach_grpc_server(&self) -> ShmControlServer<ShmCtlHandler> {
+    pub fn detach_grpc_server(&self) -> ShmControlServer<ShmCtlHandler> {
         let handler = ShmCtlHandler {
             notify: self.notify.clone(),
             session_manager: self.session_manager.clone(),
