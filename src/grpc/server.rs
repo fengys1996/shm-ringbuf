@@ -93,9 +93,9 @@ where
     }
 }
 
-struct ShmCtlHandler {
-    notify: Arc<Notify>,
-    session_manager: SessionManagerRef,
+pub struct ShmCtlHandler {
+    pub(crate) notify: Arc<Notify>,
+    pub(crate) session_manager: SessionManagerRef,
 }
 
 #[async_trait::async_trait]

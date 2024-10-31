@@ -4,6 +4,8 @@ pub mod settings;
 pub(crate) mod session_manager;
 
 use std::fmt::Debug;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,6 +21,8 @@ use tracing::warn;
 
 use crate::error::DataProcessResult;
 use crate::fd_pass::FdRecvServer;
+use crate::grpc::proto::shm_control_server::ShmControlServer;
+use crate::grpc::server::ShmCtlHandler;
 use crate::grpc::server::ShmCtlServer;
 
 pub struct RingbufConsumer {
@@ -26,6 +30,7 @@ pub struct RingbufConsumer {
     notify: Arc<Notify>,
     settings: ConsumerSettings,
     cancel: CancellationToken,
+    detach_grpc: AtomicBool,
 }
 
 impl RingbufConsumer {
@@ -34,16 +39,16 @@ impl RingbufConsumer {
             settings.max_session_capacity,
             settings.session_tti,
         ));
-
         let notify = Arc::new(Notify::new());
-
         let cancel = CancellationToken::new();
+        let detach_grpc = AtomicBool::new(false);
 
         RingbufConsumer {
             session_manager,
             notify,
             cancel,
             settings,
+            detach_grpc,
         }
     }
 
@@ -52,13 +57,24 @@ impl RingbufConsumer {
         P: DataProcess<Error = E>,
         E: Into<DataProcessResult> + Debug + Send,
     {
-        self.start_grpc_server().await;
+        if !self.detach_grpc.load(Ordering::Relaxed) {
+            self.start_grpc_server().await;
+        }
 
         self.start_fdrecv_server().await;
 
         let interval = self.settings.process_interval;
         let cancel = self.cancel.clone();
         self.process_loop(&processor, interval, Some(cancel)).await;
+    }
+
+    pub fn detach_grpc_server(&self) -> ShmControlServer<ShmCtlHandler> {
+        let handler = ShmCtlHandler {
+            notify: self.notify.clone(),
+            session_manager: self.session_manager.clone(),
+        };
+        self.detach_grpc.store(true, Ordering::Relaxed);
+        ShmControlServer::new(handler)
     }
 
     pub fn cancel(&self) {
