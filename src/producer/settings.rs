@@ -14,6 +14,12 @@ pub struct ProducerSettings {
     pub(super) ringbuf_len: usize,
     pub(super) heartbeat_interval: Duration,
     pub(super) result_fetch_retry_interval: Duration,
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd"
+    )))]
+    pub(super) backed_file_path: PathBuf,
 }
 
 #[derive(Default)]
@@ -23,6 +29,12 @@ pub struct ProducerSettingsBuilder {
     ringbuf_len: Option<usize>,
     heartbeat_interval: Option<Duration>,
     result_fetch_retry_interval: Option<Duration>,
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd"
+    )))]
+    pub(super) backed_file_path: Option<PathBuf>,
 }
 
 impl ProducerSettingsBuilder {
@@ -62,6 +74,17 @@ impl ProducerSettingsBuilder {
         self
     }
 
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd"
+    )))]
+    /// Set the path of the backed file.
+    pub fn backed_file_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.backed_file_path = Some(path.into());
+        self
+    }
+
     pub fn build(self) -> ProducerSettings {
         let grpc_sock_path = self
             .grpc_sock_path
@@ -81,13 +104,36 @@ impl ProducerSettingsBuilder {
             .result_fetch_retry_interval
             .unwrap_or(DEFAULT_RESULT_FETCH_RETRY_INTERVAL);
 
-        ProducerSettings {
+        let backed_file_path = self
+            .backed_file_path
+            .unwrap_or_else(|| PathBuf::from("/tmp/shm"));
+
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "freebsd"
+        )))]
+        return ProducerSettings {
             grpc_sock_path,
             fdpass_sock_path,
             ringbuf_len,
             heartbeat_interval,
             result_fetch_retry_interval,
-        }
+            backed_file_path,
+        };
+
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "freebsd"
+        ))]
+        return ProducerSettings {
+            grpc_sock_path,
+            fdpass_sock_path,
+            ringbuf_len,
+            heartbeat_interval,
+            result_fetch_retry_interval,
+        };
     }
 }
 

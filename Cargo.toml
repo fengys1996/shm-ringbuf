@@ -15,7 +15,9 @@ hyper-util = { version = "0.1" }
 moka = { version = "0.12", features = ["sync"] }
 nix = { version = "0.29", features = ["mman", "fs"] }
 once_cell = { version = "1.20" }
-passfd = { git = "https://github.com/polachok/passfd.git", rev = "d55881752c16aced1a49a75f9c428d38d3767213", features = ["async"] }
+passfd = { git = "https://github.com/polachok/passfd.git", rev = "d55881752c16aced1a49a75f9c428d38d3767213", features = [
+  "async",
+] }
 prost = { version = "0.13" }
 uuid = { version = "1.7", features = ["v4"] }
 snafu = { version = "0.8" }
