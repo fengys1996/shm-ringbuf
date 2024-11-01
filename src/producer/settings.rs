@@ -104,6 +104,11 @@ impl ProducerSettingsBuilder {
             .result_fetch_retry_interval
             .unwrap_or(DEFAULT_RESULT_FETCH_RETRY_INTERVAL);
 
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "freebsd"
+        )))]
         let backed_file_path = self
             .backed_file_path
             .unwrap_or_else(|| PathBuf::from("/tmp/shm"));

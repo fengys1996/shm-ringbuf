@@ -68,6 +68,11 @@ impl RingbufProducer {
 
         let client_id = gen_client_id();
 
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "freebsd"
+        )))]
         let memfd = create_fd(Settings {
             name: client_id.clone(),
             size: ringbuf_len as u64,

@@ -1,7 +1,6 @@
 use std::fs;
 use std::os::fd::FromRawFd;
 use std::os::fd::IntoRawFd;
-use std::path::PathBuf;
 
 use snafu::ResultExt;
 
@@ -21,7 +20,7 @@ pub struct Settings {
         target_os = "android",
         target_os = "freebsd"
     )))]
-    pub path: PathBuf,
+    pub path: std::path::PathBuf,
 }
 
 /// Create a memfd with the given settings.
@@ -34,9 +33,6 @@ pub fn create_fd(settings: Settings) -> Result<fs::File> {
     {
         use std::ffi::CString;
 
-        use nix::fcntl::fcntl;
-        use nix::fcntl::FcntlArg;
-        use nix::fcntl::SealFlag;
         use nix::sys::memfd;
 
         let Settings { name, size } = settings;
@@ -96,8 +92,11 @@ pub fn create_fd(settings: Settings) -> Result<fs::File> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 fn disable_shrink_or_grow(fd: i32) -> Result<()> {
+    use nix::fcntl::fcntl;
+    use nix::fcntl::FcntlArg;
+    use nix::fcntl::SealFlag;
     let seal_flag = SealFlag::F_SEAL_GROW | SealFlag::F_SEAL_SHRINK;
     let fcntl_arg = FcntlArg::F_ADD_SEALS(seal_flag);
     fcntl(fd, fcntl_arg).context(error::FcntlSnafu)?;
