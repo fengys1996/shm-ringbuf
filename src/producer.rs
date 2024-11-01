@@ -22,8 +22,8 @@ use self::prealloc::PreAlloc;
 use crate::error::Result;
 use crate::fd_pass::send_fd;
 use crate::grpc::client::GrpcClient;
-use crate::memfd::memfd_create;
-use crate::memfd::MemfdSettings;
+use crate::memfd::create_fd;
+use crate::memfd::Settings;
 use crate::ringbuf::Ringbuf;
 
 pub struct RingbufProducer {
@@ -39,6 +39,25 @@ impl RingbufProducer {
     pub async fn connect_lazy(
         settings: ProducerSettings,
     ) -> Result<RingbufProducer> {
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "freebsd"
+        )))]
+        let ProducerSettings {
+            grpc_sock_path,
+            ringbuf_len,
+            fdpass_sock_path,
+            heartbeat_interval,
+            result_fetch_retry_interval,
+            backed_file_path,
+        } = settings;
+
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "freebsd"
+        ))]
         let ProducerSettings {
             grpc_sock_path,
             ringbuf_len,
@@ -49,7 +68,22 @@ impl RingbufProducer {
 
         let client_id = gen_client_id();
 
-        let memfd = memfd_create(MemfdSettings {
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "freebsd"
+        )))]
+        let memfd = create_fd(Settings {
+            name: client_id.clone(),
+            size: ringbuf_len as u64,
+            path: backed_file_path,
+        })?;
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "freebsd"
+        ))]
+        let memfd = create_fd(Settings {
             name: client_id.clone(),
             size: ringbuf_len as u64,
         })?;

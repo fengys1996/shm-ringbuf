@@ -443,6 +443,7 @@ mod tests {
     use super::Ringbuf;
     use crate::error;
     use crate::ringbuf;
+    use crate::ringbuf::min_ringbuf_len;
     use crate::ringbuf::page_align_metadata_len;
     use crate::ringbuf::page_align_size;
 
@@ -473,11 +474,11 @@ mod tests {
     #[test]
     fn test_ringbuf_remain_bytes() {
         let file = tempfile::tempfile().unwrap();
-        file.set_len(10240).unwrap();
+        file.set_len(min_ringbuf_len()).unwrap();
 
         let ringbuf_producer = ringbuf::Ringbuf::new(&file).unwrap();
 
-        let actual_alloc_bytes = page_align_size(10240) as u32;
+        let actual_alloc_bytes = page_align_size(min_ringbuf_len()) as u32;
         let datapart_len =
             actual_alloc_bytes - page_align_metadata_len() as u32;
 
