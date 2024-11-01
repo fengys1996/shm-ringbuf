@@ -111,7 +111,7 @@ impl ProducerSettingsBuilder {
         )))]
         let backed_file_path = self
             .backed_file_path
-            .unwrap_or_else(|| PathBuf::from("/tmp/shm"));
+            .unwrap_or_else(|| PathBuf::from("/tmp/shm.sock"));
 
         #[cfg(not(any(
             target_os = "linux",
