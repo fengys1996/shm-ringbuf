@@ -238,10 +238,7 @@ mod tests {
     use crate::consumer::session_manager::SessionManager;
     use crate::fd_pass::FdRecvServer;
     use crate::ringbuf::min_ringbuf_len;
-<<<<<<< HEAD
-=======
     use crate::ringbuf::page_align_size;
->>>>>>> 3ab2ddb (fix: unit test)
 
     #[tokio::test]
     async fn test_fd_pass() {
@@ -277,11 +274,7 @@ mod tests {
             let path_c = path.clone();
             let join = tokio::spawn(async move {
                 let file = tempfile::tempfile().unwrap();
-<<<<<<< HEAD
-                file.set_len(min_ringbuf_len()).unwrap();
-=======
                 file.set_len(page_align_size(min_ringbuf_len())).unwrap();
->>>>>>> 3ab2ddb (fix: unit test)
                 let client_id = format!("client_id_{}", i);
                 send_fd(path_c, &file, client_id).await.unwrap();
             });
