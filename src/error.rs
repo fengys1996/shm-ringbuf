@@ -47,6 +47,18 @@ pub enum Error {
         location: Location,
     },
 
+    #[snafu(display(
+        "Exceed capacity, expected: {}, capacity: {}",
+        expected,
+        capacity
+    ))]
+    ExceedCapacity {
+        expected: u32,
+        capacity: u32,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
     #[snafu(display("From utf8"))]
     FromUtf8 {
         source: std::string::FromUtf8Error,

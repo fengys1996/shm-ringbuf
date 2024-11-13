@@ -227,7 +227,16 @@ impl Ringbuf {
         let bytes = (bytes + 3) / 4 * 4;
         let actual_alloc_bytes = (bytes + HEADER_LEN) as u32;
 
-        // 2. check if there is enough space.
+        // 2. check if the actual allocate bytes exceeds the capacity.
+        ensure!(
+            actual_alloc_bytes <= self.capacity(),
+            error::ExceedCapacitySnafu {
+                capacity: self.capacity(),
+                expected: actual_alloc_bytes,
+            }
+        );
+
+        // 3. check if there is enough space.
         ensure!(
             actual_alloc_bytes <= self.remain_bytes(),
             error::NotEnoughSpaceSnafu {
@@ -236,7 +245,7 @@ impl Ringbuf {
             }
         );
 
-        // 3. create the data block.
+        // 4. create the data block.
         let produce_offset = self.produce_offset();
         let start_ptr =
             unsafe { self.data_part_ptr.add(produce_offset as usize) };
@@ -251,7 +260,7 @@ impl Ringbuf {
             )?
         };
 
-        // 4. advance the produce offset.
+        // 5. advance the produce offset.
         unsafe {
             self.advance_produce_offset(actual_alloc_bytes);
         }
@@ -557,6 +566,17 @@ mod tests {
             ringbuf_producer.advance_produce_offset(9);
         }
         assert_eq!(ringbuf_producer.produce_offset(), 8);
+    }
+
+    #[test]
+    fn test_reserve_with_execced_capacity() {
+        let file = tempfile::tempfile().unwrap();
+        file.set_len(min_ringbuf_len()).unwrap();
+
+        let mut ringbuf = ringbuf::Ringbuf::new(&file).unwrap();
+
+        let result = ringbuf.reserve(ringbuf.capacity() as usize, 1);
+        assert!(matches!(result, Err(error::Error::ExceedCapacity { .. })));
     }
 
     #[test]
