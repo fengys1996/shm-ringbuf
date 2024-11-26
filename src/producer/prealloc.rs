@@ -6,6 +6,7 @@ use std::task::Poll;
 use futures::FutureExt;
 use tokio::sync::oneshot::Receiver;
 
+use crate::error;
 use crate::error::DataProcessResult;
 use crate::error::Result;
 use crate::ringbuf::data_block::DataBlock;
@@ -44,12 +45,15 @@ pub struct Handle {
 }
 
 impl Future for Handle {
-    type Output = std::result::Result<DataProcessResult, ()>;
+    type Output = Result<DataProcessResult>;
 
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Self::Output> {
-        self.rx.poll_unpin(cx).map(|res| res.map_err(|_| ()))
+        self.rx.poll_unpin(cx).map_err(|e| error::Error::Recv {
+            source: e,
+            location: snafu::location!(),
+        })
     }
 }
