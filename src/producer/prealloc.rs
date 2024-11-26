@@ -22,6 +22,11 @@ impl PreAlloc {
         self.data_block.slice().unwrap()
     }
 
+    /// Get the capacity of the pre-allocated.
+    pub fn capacity(&self) -> u32 {
+        self.data_block.capacity()
+    }
+
     /// Write data to the pre-allocated.
     pub fn write(&mut self, data: &[u8]) -> Result<()> {
         self.data_block.write(data)
