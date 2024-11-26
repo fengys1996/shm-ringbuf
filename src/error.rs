@@ -3,6 +3,7 @@ use std::num::TryFromIntError;
 
 use snafu::Location;
 use snafu::Snafu;
+use tokio::sync::oneshot::error::RecvError;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub))]
@@ -131,6 +132,13 @@ pub enum Error {
         from: String,
         to: String,
         source: TryFromIntError,
+        #[snafu(implicit)]
+        location: Location,
+    },
+
+    #[snafu(display("Failed to recv msg from oneshot channel"))]
+    Recv {
+        source: RecvError,
         #[snafu(implicit)]
         location: Location,
     },
