@@ -17,17 +17,17 @@ pub struct PreAlloc {
 }
 
 impl PreAlloc {
-    /// Get the slice of the pre-allocated.
+    /// Get the slice of the [`PreAlloc`].
     pub fn slice(&self) -> &[u8] {
         self.data_block.slice().unwrap()
     }
 
-    /// Get the capacity of the pre-allocated.
+    /// Get the capacity of the [`PreAlloc`].
     pub fn capacity(&self) -> u32 {
         self.data_block.capacity()
     }
 
-    /// Write data to the pre-allocated.
+    /// Write data to the [`PreAlloc`].
     pub fn write(&mut self, data: &[u8]) -> Result<()> {
         self.data_block.write(data)
     }
