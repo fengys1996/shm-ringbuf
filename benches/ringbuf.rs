@@ -23,16 +23,15 @@ pub mod benches {
     }
 
     fn write_ringbuf_until_full() -> Ringbuf {
-        let data_size = 1024 * 32;
-        let actual_size = Ringbuf::actual_alloc_bytes(data_size);
+        let data_size = 1024 * 32_u64;
 
         let file = tempfile::tempfile().unwrap();
-        file.set_len(actual_size as u64).unwrap();
+        file.set_len(data_size).unwrap();
 
-        let mut ringbuf = Ringbuf::new(&file, data_size).unwrap();
+        let mut ringbuf = Ringbuf::new(&file).unwrap();
         let mut i = 1;
         loop {
-            let result = ringbuf.reserve(20);
+            let result = ringbuf.reserve(20, i);
             if matches!(result, Err(error::Error::NotEnoughSpace { .. })) {
                 break;
             }
