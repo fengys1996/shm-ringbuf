@@ -81,8 +81,8 @@ impl<T> DataBlock<T> {
         self.header.busy()
     }
 
-    pub fn business_id(&self) -> u32 {
-        self.header.business_id()
+    pub fn req_id(&self) -> u32 {
+        self.header.req_id()
     }
 }
 
@@ -94,7 +94,7 @@ impl<T> DataBlock<T> {
     /// The caller must ensurea that `start_ptr` and `len` identify a valid
     /// [`DataBlock`].
     pub(crate) unsafe fn new(
-        business_id: u32,
+        req_id: u32,
         start_ptr: *mut u8,
         len: u32,
         object: Arc<T>,
@@ -113,7 +113,7 @@ impl<T> DataBlock<T> {
         header.set_capacity(len - header_len_u32);
         header.set_written(0);
         header.set_busy(true);
-        header.set_business_id(business_id);
+        header.set_req_id(req_id);
 
         let data_ptr = unsafe { start_ptr.add(HEADER_LEN) };
 
@@ -165,7 +165,7 @@ impl<T> DataBlock<T> {
 /// |                   |                   |
 /// v                   v                   v
 /// +-------------------+-------------------+-------------------+-------------------+
-/// | capacity          | len               | busy              | business ID       |
+/// | capacity          | len               | busy              | request ID        |
 /// +-------------------+-------------------+-------------------+-------------------+
 /// | 4 bytes           | 4 bytes           | 4 bytes           | 4 bytes           |
 /// +-------------------+-------------------+-------------------+-------------------+
@@ -183,7 +183,8 @@ struct Header {
     /// reading the [`DataBlock`].
     busy_ptr: *mut u32,
 
-    id_ptr: *mut u32,
+    /// The pointer to the request ID.
+    req_id_ptr: *mut u32,
 }
 
 impl Header {
@@ -196,13 +197,13 @@ impl Header {
         let capacity_ptr = header_ptr as *mut u32;
         let len_ptr = capacity_ptr.add(1);
         let busy_ptr = len_ptr.add(1);
-        let id_ptr = busy_ptr.add(1);
+        let req_id_ptr = busy_ptr.add(1);
 
         Self {
             capacity_ptr,
             len_ptr,
             busy_ptr,
-            id_ptr,
+            req_id_ptr,
         }
     }
 
@@ -254,14 +255,14 @@ impl Header {
         atomic.fetch_add(len, Ordering::Relaxed);
     }
 
-    fn business_id(&self) -> u32 {
-        let ptr = self.id_ptr;
+    fn req_id(&self) -> u32 {
+        let ptr = self.req_id_ptr;
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.load(Ordering::Relaxed)
     }
 
-    fn set_business_id(&self, id: u32) {
-        let ptr = self.id_ptr;
+    fn set_req_id(&self, id: u32) {
+        let ptr = self.req_id_ptr;
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.store(id, Ordering::Relaxed);
     }
@@ -326,7 +327,7 @@ mod tests {
         assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
         assert_eq!(data_block.written_len(), 0);
         assert!(data_block.is_busy());
-        assert_eq!(data_block.business_id(), 1);
+        assert_eq!(data_block.req_id(), 1);
 
         let data_block = unsafe { DataBlock::from_raw(data_ptr, Arc::new(())) };
 
