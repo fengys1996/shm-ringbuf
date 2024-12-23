@@ -6,6 +6,7 @@ use shm_ringbuf::{
     producer::{prealloc::PreAlloc, RingbufProducer},
 };
 use tokio::{sync::mpsc::Sender, time::sleep};
+use tracing::{error, warn};
 
 pub struct MsgForward {
     pub sender: Sender<String>,
@@ -74,8 +75,12 @@ pub async fn reserve_with_retry(
         };
 
         if !matches!(err, shm_ringbuf::error::Error::NotEnoughSpace { .. }) {
+            error!("reserve failed, retry: {}, error: {:?}, break", size, err);
             break;
         }
+
+        warn!("reserve failed, retry: {}, error: {:?}, retry", size, err);
+
         sleep(retry_interval).await;
     }
 
