@@ -221,7 +221,7 @@ impl Ringbuf {
     pub fn reserve(
         &mut self,
         bytes: usize,
-        business_id: u32,
+        req_id: u32,
     ) -> Result<DataBlock<DropGuard>> {
         // 1. calculate the actual allocated bytes.
         let bytes = (bytes + 3) / 4 * 4;
@@ -252,12 +252,7 @@ impl Ringbuf {
         let drop_guard = self.drop_guard.clone();
 
         let data_block = unsafe {
-            DataBlock::new(
-                business_id,
-                start_ptr,
-                actual_alloc_bytes,
-                drop_guard,
-            )?
+            DataBlock::new(req_id, start_ptr, actual_alloc_bytes, drop_guard)?
         };
 
         // 5. advance the produce offset.

@@ -31,7 +31,7 @@ pub struct RingbufProducer {
     grpc_client: GrpcClient,
     online: Arc<AtomicBool>,
     cancel: CancellationToken,
-    business_id: AtomicU32,
+    req_id: AtomicU32,
     result_fetcher: ResultFetcher,
 }
 
@@ -91,7 +91,7 @@ impl RingbufProducer {
         let grpc_client = GrpcClient::new(&client_id, grpc_sock_path);
         let ringbuf = RwLock::new(Ringbuf::new(&memfd)?);
         let online = Arc::new(AtomicBool::new(false));
-        let business_id = AtomicU32::new(0);
+        let req_id = AtomicU32::new(0);
         let cancel = CancellationToken::new();
 
         let session_handle = SessionHandle {
@@ -121,7 +121,7 @@ impl RingbufProducer {
             grpc_client,
             online,
             cancel,
-            business_id,
+            req_id,
             result_fetcher,
         };
 
@@ -129,11 +129,10 @@ impl RingbufProducer {
     }
 
     pub fn reserve(&self, size: usize) -> Result<PreAlloc> {
-        let business_id = self.gen_business_id();
-        let data_block =
-            self.ringbuf.write().unwrap().reserve(size, business_id)?;
+        let req_id = self.gen_req_id();
+        let data_block = self.ringbuf.write().unwrap().reserve(size, req_id)?;
 
-        let rx = self.result_fetcher.subscribe(business_id);
+        let rx = self.result_fetcher.subscribe(req_id);
 
         let pre = PreAlloc { data_block, rx };
 
@@ -141,7 +140,7 @@ impl RingbufProducer {
     }
 
     pub async fn notify_consumer(&self, notify_limit: Option<u32>) {
-        let need_notify = notify_limit.map_or(true, |limit| {
+        let need_notify = notify_limit.is_none_or(|limit| {
             self.ringbuf.read().unwrap().written_bytes() > limit
         });
 
@@ -166,9 +165,9 @@ impl RingbufProducer {
         self.result_fetcher.is_normal()
     }
 
-    /// Generate a business id.
-    fn gen_business_id(&self) -> u32 {
-        self.business_id.fetch_add(1, Ordering::Relaxed)
+    /// Generate a request id.
+    fn gen_req_id(&self) -> u32 {
+        self.req_id.fetch_add(1, Ordering::Relaxed)
     }
 }
 
