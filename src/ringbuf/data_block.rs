@@ -100,17 +100,19 @@ impl<T> DataBlock<T> {
         object: Arc<T>,
     ) -> Result<Self> {
         let header_len_u32 = convert_num!(HEADER_LEN, u32)?;
-        let data_len = len - header_len_u32;
 
         ensure!(
-            data_len > 0,
+            len >= header_len_u32,
             error::InvalidParameterSnafu {
-                detail: "Total_length must be greater than HEADER_LEN.",
+                detail: "Total length must be greater than HEADER_LEN.",
             }
         );
 
+        // Unwrap safety: checked above.
+        let data_len = len.checked_sub(header_len_u32).unwrap();
+
         let header = Header::fow_raw(start_ptr);
-        header.set_capacity(len - header_len_u32);
+        header.set_capacity(data_len);
         header.set_written(0);
         header.set_busy(true);
         header.set_req_id(req_id);
@@ -305,7 +307,7 @@ mod tests {
         let small_len = HEADER_LEN as u32;
 
         let result =
-            unsafe { DataBlock::new(1, data_ptr, small_len, Arc::new(())) };
+            unsafe { DataBlock::new(1, data_ptr, small_len - 1, Arc::new(())) };
 
         assert!(matches!(result, Err(error::Error::InvalidParameter { .. })));
 

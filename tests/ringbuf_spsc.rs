@@ -13,24 +13,34 @@ use shm_ringbuf::producer::RingbufProducer;
 
 #[tokio::test]
 async fn test_ringbuf_spsc_base() {
-    do_test_ringbuf_spsc(false, Duration::from_millis(10), None).await;
+    do_test_ringbuf_spsc(false, Duration::from_millis(10), None, 0, 1000).await;
 }
 
 #[tokio::test]
 async fn test_ringbuf_spsc_with_notify() {
     // Set too long interval for testing notify.
-    do_test_ringbuf_spsc(false, Duration::from_secs(100), Some(1000)).await;
+    do_test_ringbuf_spsc(false, Duration::from_secs(100), Some(500), 499, 1000)
+        .await;
 }
 
 #[tokio::test]
 async fn test_ringbuf_spsc_with_wait_result() {
-    do_test_ringbuf_spsc(true, Duration::from_millis(10), None).await;
+    do_test_ringbuf_spsc(true, Duration::from_millis(10), None, 0, 1000).await;
+}
+
+#[tokio::test]
+async fn test_ringbuf_spsc_with_wait_result_and_notify() {
+    // Set too long interval for testing notify.
+    do_test_ringbuf_spsc(true, Duration::from_secs(100), Some(500), 499, 1000)
+        .await;
 }
 
 async fn do_test_ringbuf_spsc(
     wait_result: bool,
     process_interval: Duration,
     notify_limit: Option<u32>,
+    min_msg_len: usize,
+    max_msg_len: usize,
 ) {
     tracing_subscriber::fmt::init();
 
@@ -74,7 +84,7 @@ async fn do_test_ringbuf_spsc(
         };
 
         for i in 0..msg_num {
-            let write_str = gen_str(1000);
+            let write_str = gen_str(min_msg_len, max_msg_len);
 
             expected_send.send(write_str.clone()).await.unwrap();
 

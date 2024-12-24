@@ -16,6 +16,7 @@ use nix::sys::mman::MapFlags;
 use nix::sys::mman::ProtFlags;
 use once_cell::sync::OnceCell;
 use snafu::ensure;
+use snafu::OptionExt;
 use snafu::ResultExt;
 use tracing::error;
 
@@ -137,7 +138,12 @@ impl Ringbuf {
         let align_metadata_len =
             convert_num!(page_align_metadata_len(), usize)?;
 
-        let align_datapart_len = file_len - align_metadata_len;
+        let align_datapart_len = file_len
+            .checked_sub(align_metadata_len)
+            .context(error::UsizeSubOverflowSnafu {
+                a: file_len,
+                b: align_metadata_len,
+            })?;
 
         let rw_prot = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
         let none_prot = ProtFlags::PROT_NONE;

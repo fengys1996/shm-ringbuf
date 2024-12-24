@@ -142,6 +142,14 @@ pub enum Error {
         #[snafu(implicit)]
         location: Location,
     },
+
+    #[snafu(display("Sub overflow, {} - {}", a, b))]
+    UsizeSubOverflow {
+        a: usize,
+        b: usize,
+        #[snafu(implicit)]
+        location: Location,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -103,9 +103,10 @@ pub async fn wait_consumer_online(
     Err("wait consumer online timeout".to_string())
 }
 
-pub fn gen_str(max_len: usize) -> String {
+pub fn gen_str(min_len: usize, max_len: usize) -> String {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789)(*&^%$#@!~";
-    let len = rand::random::<usize>() % max_len + 1;
+
+    let len = rand::random::<usize>() % (max_len - min_len) + min_len;
 
     let mut s = String::new();
 
