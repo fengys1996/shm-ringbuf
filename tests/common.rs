@@ -57,7 +57,7 @@ impl From<Error> for DataProcessResult {
 
 pub fn msg_num() -> usize {
     std::env::var("MSG_NUM")
-        .unwrap_or_else(|_| "100000".to_string())
+        .unwrap_or_else(|_| "10000".to_string())
         .parse()
         .unwrap()
 }
@@ -101,4 +101,17 @@ pub async fn wait_consumer_online(
     }
 
     Err("wait consumer online timeout".to_string())
+}
+
+pub fn gen_str(max_len: usize) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789)(*&^%$#@!~";
+    let len = rand::random::<usize>() % max_len + 1;
+
+    let mut s = String::new();
+
+    for _ in 0..len {
+        s.push(CHARSET[rand::random::<usize>() % CHARSET.len()] as char);
+    }
+
+    s
 }
