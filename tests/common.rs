@@ -1,4 +1,4 @@
-use std::{str::from_utf8, time::Duration};
+use std::{str::from_utf8, sync::Arc, time::Duration};
 
 use shm_ringbuf::{
     consumer::process::DataProcess,
@@ -115,4 +115,98 @@ pub fn gen_str(min_len: usize, max_len: usize) -> String {
     }
 
     s
+}
+
+pub struct StartProducerOptions {
+    pub producer: Arc<RingbufProducer>,
+    pub msg_num: usize,
+    pub expected_send: Sender<String>,
+    pub wait_result: bool,
+    pub min_msg_len: usize,
+    pub max_msg_len: usize,
+    pub notify_limit: Option<u32>,
+    pub msg_prefix: Option<String>,
+}
+
+pub async fn start_producer(options: StartProducerOptions) {
+    let StartProducerOptions {
+        producer,
+        msg_num,
+        expected_send,
+        wait_result,
+        min_msg_len,
+        max_msg_len,
+        notify_limit,
+        msg_prefix,
+    } = options;
+
+    tokio::spawn(async move {
+        let mut joins = if wait_result {
+            Some(Vec::with_capacity(1000))
+        } else {
+            None
+        };
+
+        for i in 0..msg_num {
+            let write_str = gen_str(min_msg_len, max_msg_len);
+
+            let write_str = if let Some(msg_prefix) = &msg_prefix {
+                format!("{}{}", msg_prefix, write_str)
+            } else {
+                write_str
+            };
+
+            expected_send.send(write_str.clone()).await.unwrap();
+
+            let mut pre_alloc = reserve_with_retry(
+                &producer,
+                write_str.len(),
+                3,
+                Duration::from_secs(1),
+            )
+            .await
+            .unwrap();
+
+            wait_consumer_online(&producer, 5, Duration::from_secs(3))
+                .await
+                .unwrap();
+
+            pre_alloc.write(write_str.as_bytes()).unwrap();
+
+            pre_alloc.commit();
+
+            if let Some(limit) = notify_limit {
+                // If we set a longer process interval, the last batch of messages
+                // may not be processed quickly, because the data accumulated in
+                // the ringbuf may be too small and does not exceed the notify limit,
+                // so the notification will not be triggered. Therefore, we need
+                // to trigger a notification at the end.
+                if i == msg_num - 1 {
+                    producer.notify_consumer(None).await;
+                } else {
+                    producer.notify_consumer(Some(limit)).await;
+                }
+            }
+
+            if let Some(joins) = &mut joins {
+                let join = pre_alloc.wait_result();
+
+                joins.push(join);
+
+                // Wait the result every 1000 messages.
+                if i % 1000 == 0 {
+                    for join in joins.drain(..) {
+                        let result = join.await.unwrap();
+                        assert_eq!(result.status_code, 0);
+                    }
+                }
+                if i == msg_num - 1 {
+                    for join in joins.drain(..) {
+                        let result = join.await.unwrap();
+                        assert_eq!(result.status_code, 0);
+                    }
+                }
+            }
+        }
+    });
 }
