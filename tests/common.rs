@@ -124,7 +124,7 @@ pub struct StartProducerOptions {
     pub wait_result: bool,
     pub min_msg_len: usize,
     pub max_msg_len: usize,
-    pub notify_limit: Option<u32>,
+    pub notify_threshold: Option<u32>,
     pub msg_prefix: Option<String>,
 }
 
@@ -136,7 +136,7 @@ pub async fn start_producer(options: StartProducerOptions) {
         wait_result,
         min_msg_len,
         max_msg_len,
-        notify_limit,
+        notify_threshold,
         msg_prefix,
     } = options;
 
@@ -175,16 +175,16 @@ pub async fn start_producer(options: StartProducerOptions) {
 
             pre_alloc.commit();
 
-            if let Some(limit) = notify_limit {
+            if let Some(threshold) = notify_threshold {
                 // If we set a longer process interval, the last batch of messages
                 // may not be processed quickly, because the data accumulated in
-                // the ringbuf may be too small and does not exceed the notify limit,
+                // the ringbuf may be too small and does not exceed the notify threshold,
                 // so the notification will not be triggered. Therefore, we need
                 // to trigger a notification at the end.
                 if i == msg_num - 1 {
                     producer.notify_consumer(None).await;
                 } else {
-                    producer.notify_consumer(Some(limit)).await;
+                    producer.notify_consumer(Some(threshold)).await;
                 }
             }
 

@@ -139,9 +139,9 @@ impl RingbufProducer {
         Ok(pre)
     }
 
-    pub async fn notify_consumer(&self, notify_limit: Option<u32>) {
-        let need_notify = notify_limit.is_none_or(|limit| {
-            self.ringbuf.read().unwrap().written_bytes() > limit
+    pub async fn notify_consumer(&self, notify_threshold: Option<u32>) {
+        let need_notify = notify_threshold.is_none_or(|threshold| {
+            self.ringbuf.read().unwrap().written_bytes() > threshold
         });
 
         if !need_notify {

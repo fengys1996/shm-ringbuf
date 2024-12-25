@@ -36,7 +36,7 @@ async fn test_ringbuf_spsc_with_wait_result_and_notify() {
 async fn do_test_ringbuf_spsc(
     wait_result: bool,
     process_interval: Duration,
-    notify_limit: Option<u32>,
+    notify_threshold: Option<u32>,
     min_msg_len: usize,
     max_msg_len: usize,
 ) {
@@ -81,7 +81,7 @@ async fn do_test_ringbuf_spsc(
         wait_result,
         min_msg_len,
         max_msg_len,
-        notify_limit,
+        notify_threshold,
         msg_prefix: None,
     };
 

@@ -36,7 +36,7 @@ async fn test_ringbuf_mpsc_with_wait_result_and_notify() {
 async fn do_test_ringbuf_mpsc(
     wait_result: bool,
     process_interval: Duration,
-    notify_limit: Option<u32>,
+    notify_threshold: Option<u32>,
     min_msg_len: usize,
     max_msg_len: usize,
 ) {
@@ -91,7 +91,7 @@ async fn do_test_ringbuf_mpsc(
             wait_result,
             min_msg_len,
             max_msg_len,
-            notify_limit,
+            notify_threshold,
             msg_prefix: Some(format!("{}-", i)),
         };
 
@@ -100,7 +100,7 @@ async fn do_test_ringbuf_mpsc(
 
     for _ in 0..num_producers * msg_num {
         let actual = recv_msgs.recv().await.unwrap();
-        let index = actual.split('-').nth(0).unwrap().parse::<usize>().unwrap();
+        let index = actual.split('-').next().unwrap().parse::<usize>().unwrap();
         let expected = expected_recvs[index].recv().await.unwrap();
 
         assert_eq!(expected, actual);
