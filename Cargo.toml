@@ -1,7 +1,9 @@
 [package]
 name = "shm-ringbuf"
 version = "0.1.0"
+authors = ["fys <fengys1996@gmail.com>"]
 edition = "2021"
+keywords = ["ringbuf", "shared-memory", "ipc"]
 license = "Apache-2.0"
 
 [features]
