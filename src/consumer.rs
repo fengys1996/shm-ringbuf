@@ -36,7 +36,7 @@ pub struct RingbufConsumer {
 impl RingbufConsumer {
     pub fn new(settings: ConsumerSettings) -> Self {
         let session_manager = Arc::new(SessionManager::new(
-            settings.max_session_capacity,
+            settings.max_session_num,
             settings.session_tti,
         ));
         let notify = Arc::new(Notify::new());

@@ -80,8 +80,7 @@ async fn do_test_ringbuf_mpsc(
 
     let msg_num = msg_num();
 
-    let producer =
-        Arc::new(RingbufProducer::new(settings).await.unwrap());
+    let producer = Arc::new(RingbufProducer::new(settings).await.unwrap());
 
     for (i, expected_send) in expected_sends.into_iter().enumerate() {
         let options = StartProducerOptions {
