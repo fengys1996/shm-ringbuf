@@ -10,7 +10,7 @@ pub struct ConsumerSettings {
     pub(super) grpc_sock_path: PathBuf,
     pub(super) fdpass_sock_path: PathBuf,
     pub(super) process_interval: Duration,
-    pub(super) max_session_capacity: u64,
+    pub(super) max_session_num: u64,
     pub(super) session_tti: Duration,
 }
 
@@ -19,7 +19,7 @@ pub struct ConsumerSettingsBuilder {
     grpc_sock_path: Option<PathBuf>,
     fdpass_sock_path: Option<PathBuf>,
     process_duration: Option<Duration>,
-    max_session_capacity: Option<u64>,
+    max_session_num: Option<u64>,
     session_tti: Option<Duration>,
 }
 
@@ -28,14 +28,13 @@ impl ConsumerSettingsBuilder {
         ConsumerSettingsBuilder::default()
     }
 
-    /// Set the path of the unix socket for gRPC communication.
+    /// Set the path of the unix socket for gRPC.
     pub fn grpc_sock_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.grpc_sock_path = Some(path.into());
         self
     }
 
-    /// Set the path of the unix socket for passing file descriptor and other
-    /// information.
+    /// Set the path of the unix socket for passing file descriptor.
     pub fn fdpass_sock_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.fdpass_sock_path = Some(path.into());
         self
@@ -47,11 +46,15 @@ impl ConsumerSettingsBuilder {
         self
     }
 
-    pub fn max_session_capacity(mut self, capacity: u64) -> Self {
-        self.max_session_capacity = Some(capacity);
+    /// Set the maximum number of sessions, which limits the number of producers
+    /// at the same time.
+    pub fn max_session_num(mut self, capacity: u64) -> Self {
+        self.max_session_num = Some(capacity);
         self
     }
 
+    /// Set the time-to-live of a session. If a session is not used for a long
+    /// time, it will be purged.
     pub fn session_tti(mut self, ttl: Duration) -> Self {
         self.session_tti = Some(ttl);
         self
@@ -68,7 +71,7 @@ impl ConsumerSettingsBuilder {
         let process_duration =
             self.process_duration.unwrap_or(DEFAULT_PROCESS_DURATION);
 
-        let max_session_capacity = self.max_session_capacity.unwrap_or(10);
+        let max_session_capacity = self.max_session_num.unwrap_or(10);
 
         let session_ttl = self.session_tti.unwrap_or(Duration::from_secs(10));
 
@@ -76,7 +79,7 @@ impl ConsumerSettingsBuilder {
             grpc_sock_path,
             fdpass_sock_path,
             process_interval: process_duration,
-            max_session_capacity,
+            max_session_num: max_session_capacity,
             session_tti: session_ttl,
         }
     }
@@ -100,7 +103,7 @@ mod tests {
             grpc_sock_path,
             fdpass_sock_path,
             process_interval: process_duration,
-            max_session_capacity,
+            max_session_num: max_session_capacity,
             session_tti,
         } = settings;
 
@@ -117,7 +120,7 @@ mod tests {
             .grpc_sock_path("/tmp/grpc_test.sock")
             .fdpass_sock_path("/tmp/fd_test.sock")
             .process_interval(Duration::from_millis(100))
-            .max_session_capacity(20)
+            .max_session_num(20)
             .session_tti(Duration::from_secs(30))
             .build();
 
@@ -125,7 +128,7 @@ mod tests {
             grpc_sock_path,
             fdpass_sock_path,
             process_interval: process_duration,
-            max_session_capacity,
+            max_session_num: max_session_capacity,
             session_tti,
         } = settings;
 
