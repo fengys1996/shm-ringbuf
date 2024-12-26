@@ -21,7 +21,7 @@ async fn main() {
         .heartbeat_interval(Duration::from_secs(1))
         .build();
 
-    let producer = RingbufProducer::connect_lazy(settings).await.unwrap();
+    let producer = RingbufProducer::new(settings).await.unwrap();
     let producer = Arc::new(producer);
 
     let mut join_handles = Vec::with_capacity(4);

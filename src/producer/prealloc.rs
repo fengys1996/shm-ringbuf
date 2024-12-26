@@ -12,6 +12,7 @@ use crate::error::Result;
 use crate::ringbuf::data_block::DataBlock;
 use crate::ringbuf::DropGuard;
 
+/// The pre-allocated data block.
 pub struct PreAlloc {
     pub(super) data_block: DataBlock<DropGuard>,
     pub(super) rx: Receiver<DataProcessResult>,
@@ -40,6 +41,7 @@ impl PreAlloc {
         self.data_block.commit();
     }
 
+    /// Return a [`Handle`] to wait for the result of data processing.
     pub fn wait_result(self) -> Handle {
         Handle { rx: self.rx }
     }

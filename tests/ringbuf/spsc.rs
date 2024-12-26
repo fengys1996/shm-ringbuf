@@ -72,7 +72,7 @@ async fn do_test_ringbuf_spsc(
     let msg_num = msg_num();
 
     let producer =
-        Arc::new(RingbufProducer::connect_lazy(settings).await.unwrap());
+        Arc::new(RingbufProducer::new(settings).await.unwrap());
 
     let options = StartProducerOptions {
         producer,
