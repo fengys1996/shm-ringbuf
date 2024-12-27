@@ -26,6 +26,7 @@ use crate::memfd::create_fd;
 use crate::memfd::Settings;
 use crate::ringbuf::Ringbuf;
 
+/// The producer of the ringbuf based on shared memory.
 pub struct RingbufProducer {
     ringbuf: RwLock<Ringbuf>,
     grpc_client: GrpcClient,
@@ -36,9 +37,11 @@ pub struct RingbufProducer {
 }
 
 impl RingbufProducer {
-    pub async fn connect_lazy(
-        settings: ProducerSettings,
-    ) -> Result<RingbufProducer> {
+    /// Create a [`RingbufProducer`] by the given settings.
+    ///
+    /// It will initially try to establish the required connection, and if fails,
+    /// it will retry in the background.
+    pub async fn new(settings: ProducerSettings) -> Result<RingbufProducer> {
         #[cfg(not(any(
             target_os = "linux",
             target_os = "android",
@@ -128,9 +131,20 @@ impl RingbufProducer {
         Ok(producer)
     }
 
-    pub fn reserve(&self, size: usize) -> Result<PreAlloc> {
+    /// Reserve a [`PreAlloc`] for committing data.
+    ///
+    /// # Errors:
+    ///
+    /// - If the requested space exceeds the capacity of ringbuf, an
+    ///     [`crate::error::Error::ExceedCapacity`] error will be returned.
+    ///
+    /// - If the requested space exceeds the remaining space of ringbuf, and
+    ///     not exceeds the capacity, an [`crate::error::Error::NotEnoughSpace`]
+    ///     error will be returned.
+    pub fn reserve(&self, bytes: usize) -> Result<PreAlloc> {
         let req_id = self.gen_req_id();
-        let data_block = self.ringbuf.write().unwrap().reserve(size, req_id)?;
+        let data_block =
+            self.ringbuf.write().unwrap().reserve(bytes, req_id)?;
 
         let rx = self.result_fetcher.subscribe(req_id);
 
@@ -139,6 +153,10 @@ impl RingbufProducer {
         Ok(pre)
     }
 
+    /// Notify the consumer to process the data.
+    ///
+    /// If the accumulated data in the ringbuf exceeds the notify_threshold, will
+    /// notify the consumer to process the data.
     pub async fn notify_consumer(&self, notify_threshold: Option<u32>) {
         let need_notify = notify_threshold.is_none_or(|threshold| {
             self.ringbuf.read().unwrap().written_bytes() > threshold
@@ -160,7 +178,7 @@ impl RingbufProducer {
         self.online.load(Ordering::Relaxed)
     }
 
-    /// Check if the result fetcher is normal.
+    /// Check if the gRPC stream which fetch execution results is created .
     pub fn result_fetch_normal(&self) -> bool {
         self.result_fetcher.is_normal()
     }
@@ -179,13 +197,13 @@ impl Drop for RingbufProducer {
 
 /// The [`SessionHandle`] is used to send the memfd, client id and ringbuf len
 /// to the consumer.
-pub struct SessionHandle {
+pub(crate) struct SessionHandle {
     pub client_id: String,
     pub fdpass_sock_path: PathBuf,
     pub memfd: File,
 }
 
-pub type SessionHandleRef = Arc<SessionHandle>;
+pub(crate) type SessionHandleRef = Arc<SessionHandle>;
 
 impl SessionHandle {
     pub async fn send(&self) -> Result<()> {

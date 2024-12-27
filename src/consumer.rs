@@ -25,39 +25,81 @@ use crate::grpc::proto::shm_control_server::ShmControlServer;
 use crate::grpc::server::ShmCtlHandler;
 use crate::grpc::server::ShmCtlServer;
 
+/// The consumer of the ringbuf based on shared memory.
 pub struct RingbufConsumer {
     session_manager: SessionManagerRef,
     notify: Arc<Notify>,
     settings: ConsumerSettings,
     cancel: CancellationToken,
-    detach_grpc: AtomicBool,
+    grpc_detached: AtomicBool,
+    started: AtomicBool,
 }
 
 impl RingbufConsumer {
+    /// Create a [`RingbufConsumer`] by the given settings.
     pub fn new(settings: ConsumerSettings) -> Self {
+        let (consumer, _) = Self::new_with_detach_grpc(settings, false);
+        consumer
+    }
+
+    /// Create a [`RingbufConsumer`] by the given settings and detach the gRPC
+    /// server according to the `detached` flag.
+    ///
+    /// Since some users have their own grpc services and do not want to occupy
+    /// an additional uds.
+    ///
+    /// Note: If detached, the `grpc_sock_path` in the settings will be ignored.
+    pub fn new_with_detach_grpc(
+        settings: ConsumerSettings,
+        detached: bool,
+    ) -> (RingbufConsumer, Option<ShmControlServer<ShmCtlHandler>>) {
         let session_manager = Arc::new(SessionManager::new(
-            settings.max_session_capacity,
+            settings.max_session_num,
             settings.session_tti,
         ));
         let notify = Arc::new(Notify::new());
         let cancel = CancellationToken::new();
-        let detach_grpc = AtomicBool::new(false);
+        let started = AtomicBool::new(false);
+        let grpc_detached = AtomicBool::new(detached);
 
-        RingbufConsumer {
+        let grpc_server = if detached {
+            let handler = ShmCtlHandler {
+                notify: notify.clone(),
+                session_manager: session_manager.clone(),
+            };
+            Some(ShmControlServer::new(handler))
+        } else {
+            None
+        };
+
+        let consumer = RingbufConsumer {
             session_manager,
             notify,
             cancel,
             settings,
-            detach_grpc,
-        }
+            grpc_detached,
+            started,
+        };
+
+        (consumer, grpc_server)
     }
 
+    /// Run the consumer, which will block the current thread.
     pub async fn run<P, E>(&self, processor: P)
     where
         P: DataProcess<Error = E>,
         E: Into<DataProcessResult> + Debug + Send,
     {
-        if !self.detach_grpc.load(Ordering::Relaxed) {
+        if self
+            .started
+            .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+        {
+            warn!("the consumer has already started.");
+            return;
+        }
+
+        if !self.grpc_detached.load(Ordering::Relaxed) {
             self.start_grpc_server().await;
         }
 
@@ -68,19 +110,14 @@ impl RingbufConsumer {
         self.process_loop(&processor, interval, Some(cancel)).await;
     }
 
-    pub fn detach_grpc_server(&self) -> ShmControlServer<ShmCtlHandler> {
-        let handler = ShmCtlHandler {
-            notify: self.notify.clone(),
-            session_manager: self.session_manager.clone(),
-        };
-        self.detach_grpc.store(true, Ordering::Relaxed);
-        ShmControlServer::new(handler)
-    }
-
+    /// Cancel the consumer.
     pub fn cancel(&self) {
         self.cancel.cancel();
     }
 
+    /// Start the gRPC server.
+    /// 1. receive the notification from the producer.
+    /// 2. send the execution results to the producer via gRPC stream.
     async fn start_grpc_server(&self) {
         let cancel = self.cancel.clone();
         let notify = self.notify.clone();
@@ -98,6 +135,7 @@ impl RingbufConsumer {
         });
     }
 
+    /// Start the server to receive the file descriptors from the producer.
     async fn start_fdrecv_server(&self) {
         let cancel = self.cancel.clone();
         let session_manager = self.session_manager.clone();
@@ -113,7 +151,8 @@ impl RingbufConsumer {
         });
     }
 
-    pub async fn process_loop<P, E>(
+    /// The main loop to process the ringbufs.
+    async fn process_loop<P, E>(
         &self,
         processor: &P,
         interval: Duration,
