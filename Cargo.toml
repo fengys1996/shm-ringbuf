@@ -5,6 +5,10 @@ authors = ["fys <fengys1996@gmail.com>"]
 edition = "2021"
 keywords = ["ringbuf", "shared-memory", "ipc"]
 license = "Apache-2.0"
+description = "A ringbuf based on shared memory"
+homepage = "https://github.com/GreptimeTeam/shm-ringbuf"
+repository = "https://github.com/GreptimeTeam/shm-ringbuf"
+readme = "README.md"
 
 [features]
 benchmark = []
