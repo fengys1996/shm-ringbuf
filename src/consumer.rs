@@ -43,7 +43,7 @@ impl RingbufConsumer {
     }
 
     /// Create a [`RingbufConsumer`] by the given settings and detach the gRPC
-    /// server.
+    /// server according to the `detached` flag.
     ///
     /// Since some users have their own grpc services and do not want to occupy
     /// an additional uds.
