@@ -25,7 +25,7 @@ use crate::grpc::proto::shm_control_server::ShmControlServer;
 use crate::grpc::server::ShmCtlHandler;
 use crate::grpc::server::ShmCtlServer;
 
-/// The comsumer of the ringbuf based on shared memory.
+/// The consumer of the ringbuf based on shared memory.
 pub struct RingbufConsumer {
     session_manager: SessionManagerRef,
     notify: Arc<Notify>,
