@@ -17,9 +17,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::UnixListener;
 use tokio::net::UnixStream;
 use tokio::time::sleep;
-use tracing::error;
-use tracing::info;
-use tracing::warn;
+use tracing::{error, info, warn};
 
 use crate::consumer::session_manager::Session;
 use crate::consumer::session_manager::SessionManagerRef;
@@ -78,6 +76,10 @@ where
     pub async fn run(&mut self) -> Result<()> {
         if let Some(parent) = self.sock_path.parent() {
             fs::create_dir_all(parent).await.context(error::IoSnafu)?;
+            warn!(
+                "create the parent directory for the unix socket file: {:?}",
+                self.sock_path
+            );
         }
 
         if self.sock_path.metadata().is_ok() {
@@ -85,7 +87,7 @@ where
                 .await
                 .context(error::IoSnafu)?;
 
-            info!("remove the unix socket file: {:?}", self.sock_path);
+            warn!("remove the unix socket file: {:?}", self.sock_path);
         }
 
         let listener =
