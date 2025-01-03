@@ -76,7 +76,7 @@ where
     pub async fn run(&mut self) -> Result<()> {
         if let Some(parent) = self.sock_path.parent() {
             fs::create_dir_all(parent).await.context(error::IoSnafu)?;
-            warn!(
+            info!(
                 "create the parent directory for the unix socket file: {:?}",
                 self.sock_path
             );
@@ -87,7 +87,7 @@ where
                 .await
                 .context(error::IoSnafu)?;
 
-            warn!("remove the unix socket file: {:?}", self.sock_path);
+            info!("remove the unix socket file: {:?}", self.sock_path);
         }
 
         let listener =
