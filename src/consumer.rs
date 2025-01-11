@@ -200,6 +200,7 @@ where
     E: Into<DataProcessResult>,
 {
     let ringbuf = session.ringbuf();
+    let enable_checksum = session.enable_checksum();
 
     while let Some(data_block) = ringbuf.peek() {
         if data_block.is_busy() {
@@ -207,6 +208,15 @@ where
         }
 
         let data_slice = data_block.slice().unwrap();
+
+        if enable_checksum
+            && crc32fast::hash(data_slice) != data_block.checksum()
+        {
+            // TODO: push result to producer
+            unsafe { ringbuf.advance_consume_offset(data_block.total_len()) }
+            continue;
+        }
+
         let req_id = data_block.req_id();
 
         if let Err(e) = processor.process(data_slice).await {

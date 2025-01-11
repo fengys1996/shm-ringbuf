@@ -18,6 +18,7 @@ use crate::ringbuf::Ringbuf;
 /// information.
 pub struct Session {
     ringbuf: Ringbuf,
+    enable_checksum: bool,
     /// Send the results of data processing to the producer.
     result_sender: RwLock<Option<Sender<StdResult<proto::ResultSet, Status>>>>,
 }
@@ -26,15 +27,22 @@ pub type SessionRef = Arc<Session>;
 impl Session {
     /// Create a new session.
     pub fn new(ringbuf: Ringbuf) -> Self {
+        let enable_checksum = ringbuf.checksum_flag();
         Self {
             ringbuf,
             result_sender: RwLock::new(None),
+            enable_checksum,
         }
     }
 
     /// Get the ringbuf of the session.
     pub fn ringbuf(&self) -> &Ringbuf {
         &self.ringbuf
+    }
+
+    /// Whether to enable checksum.
+    pub fn enable_checksum(&self) -> bool {
+        self.enable_checksum
     }
 
     /// Push an OK result to the producer.

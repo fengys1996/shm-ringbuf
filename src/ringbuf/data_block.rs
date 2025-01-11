@@ -20,7 +20,7 @@ use crate::error::Result;
 /// +-------------------+-----------------------------------------------+
 /// | Header            | Data                                          |
 /// +-------------------+-----------------------------------------------+
-/// | 16 bytes          | *(header.capacity_ptr) bytes                  |
+/// | 32 bytes          | *(header.capacity_ptr) bytes                  |
 /// +-------------------+-----------------------------------------------+
 /// ```
 pub struct DataBlock<T> {
@@ -30,7 +30,7 @@ pub struct DataBlock<T> {
 }
 
 // Unit is byte.
-pub const HEADER_LEN: usize = 4 * 4;
+pub const HEADER_LEN: usize = 4 * 8;
 
 unsafe impl<T> Send for DataBlock<T> {}
 unsafe impl<T> Sync for DataBlock<T> {}
@@ -83,6 +83,14 @@ impl<T> DataBlock<T> {
 
     pub fn req_id(&self) -> u32 {
         self.header.req_id()
+    }
+
+    pub fn checksum(&self) -> u32 {
+        self.header.crc32()
+    }
+
+    pub fn set_checksum(&self, checksum: u32) {
+        self.header.set_crc32(checksum);
     }
 }
 
@@ -163,14 +171,14 @@ impl<T> DataBlock<T> {
 /// ## The underlying structure
 ///
 /// ```text
-/// header.capacity_ptr header.len_ptr      header.busy_ptr
-/// |                   |                   |
-/// v                   v                   v
-/// +-------------------+-------------------+-------------------+-------------------+
-/// | capacity          | len               | busy              | request ID        |
-/// +-------------------+-------------------+-------------------+-------------------+
-/// | 4 bytes           | 4 bytes           | 4 bytes           | 4 bytes           |
-/// +-------------------+-------------------+-------------------+-------------------+
+/// header.capacity_ptr header.len_ptr      header.busy_ptr     header.req_id_ptr   header.crc32_ptr
+/// |                   |                   |                   |                   |
+/// v                   v                   v                   v                   v
+/// +-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
+/// | capacity          | len               | busy              | request ID        | crc32 checksum    | reserved          |
+/// +-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
+/// | 4 bytes           | 4 bytes           | 4 bytes           | 4 bytes           | 4 bytes           | 12 bytes          |
+/// +-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
 struct Header {
     /// The pointer to the capacity.
     capacity_ptr: *mut u32,
@@ -187,6 +195,9 @@ struct Header {
 
     /// The pointer to the request ID.
     req_id_ptr: *mut u32,
+
+    /// The pointer to the CRC32 checksum.
+    crc32_ptr: *mut u32,
 }
 
 impl Header {
@@ -200,12 +211,14 @@ impl Header {
         let len_ptr = capacity_ptr.add(1);
         let busy_ptr = len_ptr.add(1);
         let req_id_ptr = busy_ptr.add(1);
+        let crc32_ptr = req_id_ptr.add(1);
 
         Self {
             capacity_ptr,
             len_ptr,
             busy_ptr,
             req_id_ptr,
+            crc32_ptr,
         }
     }
 
@@ -267,6 +280,18 @@ impl Header {
         let ptr = self.req_id_ptr;
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
         atomic.store(id, Ordering::Relaxed);
+    }
+
+    fn crc32(&self) -> u32 {
+        let ptr = self.crc32_ptr;
+        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
+        atomic.load(Ordering::Relaxed)
+    }
+
+    fn set_crc32(&self, crc32: u32) {
+        let ptr = self.crc32_ptr;
+        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
+        atomic.store(crc32, Ordering::Relaxed);
     }
 }
 

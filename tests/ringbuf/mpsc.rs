@@ -11,26 +11,89 @@ use tokio::sync::mpsc;
 
 #[tokio::test]
 async fn test_ringbuf_mpsc_base() {
-    do_test_ringbuf_mpsc(false, Duration::from_millis(10), None, 0, 1000).await;
+    do_test_ringbuf_mpsc(
+        false,
+        Duration::from_millis(10),
+        None,
+        0,
+        1000,
+        false,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_ringbuf_mpsc_base_with_checksum() {
+    do_test_ringbuf_mpsc(false, Duration::from_millis(10), None, 0, 1000, true)
+        .await;
 }
 
 #[tokio::test]
 async fn test_ringbuf_mpsc_with_notify() {
     // Set too long interval for testing notify.
-    do_test_ringbuf_mpsc(false, Duration::from_secs(100), Some(500), 501, 1000)
-        .await;
+    do_test_ringbuf_mpsc(
+        false,
+        Duration::from_secs(100),
+        Some(500),
+        501,
+        1000,
+        false,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_ringbuf_mpsc_with_notify_with_checksum() {
+    // Set too long interval for testing notify.
+    do_test_ringbuf_mpsc(
+        false,
+        Duration::from_secs(100),
+        Some(500),
+        501,
+        1000,
+        true,
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn test_ringbuf_mpsc_with_wait_result() {
-    do_test_ringbuf_mpsc(true, Duration::from_millis(10), None, 0, 1000).await;
+    do_test_ringbuf_mpsc(true, Duration::from_millis(10), None, 0, 1000, false)
+        .await;
+}
+
+#[tokio::test]
+async fn test_ringbuf_mpsc_with_wait_result_with_checksum() {
+    do_test_ringbuf_mpsc(true, Duration::from_millis(10), None, 0, 1000, true)
+        .await;
 }
 
 #[tokio::test]
 async fn test_ringbuf_mpsc_with_wait_result_and_notify() {
     // Set too long interval for testing notify.
-    do_test_ringbuf_mpsc(true, Duration::from_secs(100), Some(500), 501, 1000)
-        .await;
+    do_test_ringbuf_mpsc(
+        true,
+        Duration::from_secs(100),
+        Some(500),
+        501,
+        1000,
+        false,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_ringbuf_mpsc_with_wait_result_and_notify_with_checksum() {
+    // Set too long interval for testing notify.
+    do_test_ringbuf_mpsc(
+        true,
+        Duration::from_secs(100),
+        Some(500),
+        501,
+        1000,
+        true,
+    )
+    .await;
 }
 
 async fn do_test_ringbuf_mpsc(
@@ -39,6 +102,7 @@ async fn do_test_ringbuf_mpsc(
     notify_threshold: Option<u32>,
     min_msg_len: usize,
     max_msg_len: usize,
+    enable_checksum: bool,
 ) {
     tracing_subscriber::fmt::init();
 
@@ -76,6 +140,7 @@ async fn do_test_ringbuf_mpsc(
     let settings = ProducerSettingsBuilder::new()
         .grpc_sock_path(grpc_sock_path.clone())
         .fdpass_sock_path(fdpass_sock_path.clone())
+        .enable_checksum(enable_checksum)
         .build();
 
     let msg_num = msg_num();

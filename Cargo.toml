@@ -15,6 +15,7 @@ benchmark = []
 
 [dependencies]
 async-trait = { version = "0.1" }
+crc32fast = { version = "1.4" }
 dashmap = { version = "6.1" }
 futures = { version = "0.3" }
 hyper-util = { version = "0.1" }

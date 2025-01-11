@@ -102,6 +102,7 @@ impl Ringbuf {
         // 3. Reset the metadata part.
         ringbuf.set_consume_offset(0);
         ringbuf.set_produce_offset(0);
+        ringbuf.set_checksum_flag(false);
 
         Ok(ringbuf)
     }
@@ -378,6 +379,26 @@ impl Ringbuf {
                 Some((pre + len) % self.data_part_len as u32)
             });
     }
+
+    /// Set the checksum flag.
+    pub fn set_checksum_flag(&self, flag: bool) {
+        let ptr = self.metadata.options;
+
+        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
+        if flag {
+            atomic.fetch_or(0x1, Ordering::Release);
+        } else {
+            atomic.fetch_and(!0x1, Ordering::Release);
+        }
+    }
+
+    /// Get the checksum flag.
+    pub fn checksum_flag(&self) -> bool {
+        let ptr = self.metadata.options;
+
+        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
+        atomic.load(Ordering::Acquire) & 0x1 != 0
+    }
 }
 
 pub struct DropGuard {
@@ -417,11 +438,11 @@ fn sys_page_size() -> u64 {
 /// metadata.produce_offset metadata.consume_offset
 ///     |                   |
 ///     v                   v
-///     +-------------------+-------------------+-------------------+
-///     | produce_offset    | consume_offset    | reserved          |
-///     +-------------------+-------------------+-------------------+
-///     | 4 bytes           | 4 bytes           | n bytes           |
-///     +-------------------+-------------------+-------------------+
+///     +-------------------+-------------------+-------------------+-------------------+
+///     | produce_offset    | consume_offset    | options           | reserved          |
+///     +-------------------+-------------------+-------------------+-------------------+
+///     | 4 bytes           | 4 bytes           | 4 bytes           | n bytes           |
+///     +-------------------+-------------------+-------------------+-------------------+
 /// ```
 #[derive(Copy, Clone, Debug)]
 pub struct RingbufMetadata {
@@ -430,6 +451,8 @@ pub struct RingbufMetadata {
 
     /// The raw pointer to consume_offset which is the next read position in ringbuf.
     pub(super) consume_offset_ptr: *mut u32,
+
+    pub(super) options: *mut u32,
 }
 
 impl RingbufMetadata {
@@ -440,10 +463,12 @@ impl RingbufMetadata {
     pub unsafe fn new(metadata_ptr: *mut u8) -> Self {
         let produce_offset_ptr = metadata_ptr as *mut u32;
         let consume_offset_ptr = unsafe { produce_offset_ptr.add(1) };
+        let options = unsafe { consume_offset_ptr.add(1) };
 
         Self {
             produce_offset_ptr,
             consume_offset_ptr,
+            options,
         }
     }
 }
@@ -597,5 +622,18 @@ mod tests {
             pre_alloc.write(write_str.as_bytes()).unwrap();
             pre_alloc.commit();
         }
+    }
+
+    #[test]
+    fn test_checksum_flag() {
+        let file = tempfile::tempfile().unwrap();
+        let ringbuf = Ringbuf::new(&file).unwrap();
+        assert!(!ringbuf.checksum_flag());
+
+        ringbuf.set_checksum_flag(true);
+        assert!(ringbuf.checksum_flag());
+
+        ringbuf.set_checksum_flag(false);
+        assert!(!ringbuf.checksum_flag());
     }
 }
