@@ -34,6 +34,7 @@ pub struct RingbufProducer {
     cancel: CancellationToken,
     req_id: AtomicU32,
     result_fetcher: ResultFetcher,
+    enable_checksum: bool,
 }
 
 impl RingbufProducer {
@@ -67,6 +68,7 @@ impl RingbufProducer {
             fdpass_sock_path,
             heartbeat_interval,
             result_fetch_retry_interval,
+            enable_checksum,
         } = settings;
 
         let client_id = gen_client_id();
@@ -92,7 +94,11 @@ impl RingbufProducer {
         })?;
 
         let grpc_client = GrpcClient::new(&client_id, grpc_sock_path);
-        let ringbuf = RwLock::new(Ringbuf::new(&memfd)?);
+
+        let ringbuf = Ringbuf::new(&memfd)?;
+        ringbuf.set_checksum_flag(enable_checksum);
+        let ringbuf = RwLock::new(ringbuf);
+
         let online = Arc::new(AtomicBool::new(false));
         let req_id = AtomicU32::new(0);
         let cancel = CancellationToken::new();
@@ -126,6 +132,7 @@ impl RingbufProducer {
             cancel,
             req_id,
             result_fetcher,
+            enable_checksum,
         };
 
         Ok(producer)
@@ -147,8 +154,13 @@ impl RingbufProducer {
             self.ringbuf.write().unwrap().reserve(bytes, req_id)?;
 
         let rx = self.result_fetcher.subscribe(req_id);
+        let enable_checksum = self.enable_checksum;
 
-        let pre = PreAlloc { data_block, rx };
+        let pre = PreAlloc {
+            data_block,
+            rx,
+            enable_checksum,
+        };
 
         Ok(pre)
     }

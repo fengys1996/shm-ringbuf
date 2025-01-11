@@ -16,6 +16,7 @@ use crate::ringbuf::DropGuard;
 pub struct PreAlloc {
     pub(super) data_block: DataBlock<DropGuard>,
     pub(super) rx: Receiver<DataProcessResult>,
+    pub(super) enable_checksum: bool,
 }
 
 impl PreAlloc {
@@ -38,6 +39,11 @@ impl PreAlloc {
     ///
     /// After commit, the consumer can see the written data.
     pub fn commit(&self) {
+        if self.enable_checksum {
+            let checksum = crc32fast::hash(self.slice());
+            self.data_block.set_checksum(checksum);
+        }
+
         self.data_block.commit();
     }
 

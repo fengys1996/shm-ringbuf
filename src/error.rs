@@ -168,3 +168,7 @@ impl DataProcessResult {
         }
     }
 }
+
+/// 100000 - 200000 are error codes used internally by shm-ringbuf and should
+/// not be used as business codes.
+pub const CHECKSUM_MISMATCH: u32 = 100000;

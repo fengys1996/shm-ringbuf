@@ -17,7 +17,9 @@ use crate::ringbuf::Ringbuf;
 /// When each client connects, the server will generate a session to save relevant
 /// information.
 pub struct Session {
+    client_id: ClientId,
     ringbuf: Ringbuf,
+    enable_checksum: bool,
     /// Send the results of data processing to the producer.
     result_sender: RwLock<Option<Sender<StdResult<proto::ResultSet, Status>>>>,
 }
@@ -25,16 +27,29 @@ pub type SessionRef = Arc<Session>;
 
 impl Session {
     /// Create a new session.
-    pub fn new(ringbuf: Ringbuf) -> Self {
+    pub fn new(client_id: ClientId, ringbuf: Ringbuf) -> Self {
+        let enable_checksum = ringbuf.checksum_flag();
         Self {
+            client_id,
             ringbuf,
             result_sender: RwLock::new(None),
+            enable_checksum,
         }
     }
 
     /// Get the ringbuf of the session.
     pub fn ringbuf(&self) -> &Ringbuf {
         &self.ringbuf
+    }
+
+    /// Get the client id of the session.
+    pub fn client_id(&self) -> &ClientId {
+        &self.client_id
+    }
+
+    /// Whether to enable checksum.
+    pub fn enable_checksum(&self) -> bool {
+        self.enable_checksum
     }
 
     /// Push an OK result to the producer.

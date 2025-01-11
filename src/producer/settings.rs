@@ -14,6 +14,7 @@ pub struct ProducerSettings {
     pub(super) ringbuf_len: usize,
     pub(super) heartbeat_interval: Duration,
     pub(super) result_fetch_retry_interval: Duration,
+    pub(super) enable_checksum: bool,
     #[cfg(not(any(
         target_os = "linux",
         target_os = "android",
@@ -29,6 +30,7 @@ pub struct ProducerSettingsBuilder {
     ringbuf_len: Option<usize>,
     heartbeat_interval: Option<Duration>,
     result_fetch_retry_interval: Option<Duration>,
+    enable_checksum: Option<bool>,
     #[cfg(not(any(
         target_os = "linux",
         target_os = "android",
@@ -74,6 +76,12 @@ impl ProducerSettingsBuilder {
         self
     }
 
+    /// Enable verify data consistency by checksum.
+    pub fn enable_checksum(mut self, enable: bool) -> Self {
+        self.enable_checksum = Some(enable);
+        self
+    }
+
     #[cfg(not(any(
         target_os = "linux",
         target_os = "android",
@@ -103,6 +111,8 @@ impl ProducerSettingsBuilder {
         let result_fetch_retry_interval = self
             .result_fetch_retry_interval
             .unwrap_or(DEFAULT_RESULT_FETCH_RETRY_INTERVAL);
+
+        let enable_checksum = self.enable_checksum.unwrap_or(false);
 
         #[cfg(not(any(
             target_os = "linux",
@@ -137,6 +147,7 @@ impl ProducerSettingsBuilder {
             fdpass_sock_path,
             ringbuf_len,
             heartbeat_interval,
+            enable_checksum,
             result_fetch_retry_interval,
         };
     }

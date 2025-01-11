@@ -20,6 +20,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::error::DataProcessResult;
+use crate::error::CHECKSUM_MISMATCH;
 use crate::fd_pass::FdRecvServer;
 use crate::grpc::proto::shm_control_server::ShmControlServer;
 use crate::grpc::server::ShmCtlHandler;
@@ -200,6 +201,7 @@ where
     E: Into<DataProcessResult>,
 {
     let ringbuf = session.ringbuf();
+    let enable_checksum = session.enable_checksum();
 
     while let Some(data_block) = ringbuf.peek() {
         if data_block.is_busy() {
@@ -208,6 +210,22 @@ where
 
         let data_slice = data_block.slice().unwrap();
         let req_id = data_block.req_id();
+
+        if enable_checksum
+            && crc32fast::hash(data_slice) != data_block.checksum()
+        {
+            let ret = DataProcessResult {
+                status_code: CHECKSUM_MISMATCH,
+                message: format!(
+                    "checksum mismatch, client id: {}, req id: {}",
+                    session.client_id(),
+                    req_id
+                ),
+            };
+            session.push_result(req_id, ret).await;
+            unsafe { ringbuf.advance_consume_offset(data_block.total_len()) }
+            continue;
+        }
 
         if let Err(e) = processor.process(data_slice).await {
             session.push_result(req_id, e).await;
