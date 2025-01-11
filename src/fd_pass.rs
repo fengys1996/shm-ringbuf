@@ -165,7 +165,7 @@ impl Handler {
         let ringbuf = Ringbuf::from(&file)?;
 
         // 6. Store the ringbuf to ringbuf store.
-        let session = Arc::new(Session::new(ringbuf));
+        let session = Arc::new(Session::new(client_id.clone(), ringbuf));
         self.session_manager.insert(client_id, session);
 
         Ok(())
