@@ -1,7 +1,7 @@
 use std::str::from_utf8;
 use std::time::Duration;
 
-use shm_ringbuf::consumer::process::DataProcess;
+use shm_ringbuf::consumer::process::{DataProcess, ResultSender};
 use shm_ringbuf::consumer::settings::ConsumerSettingsBuilder;
 use shm_ringbuf::consumer::RingbufConsumer;
 use shm_ringbuf::error::DataProcessResult;
@@ -23,13 +23,19 @@ async fn main() {
 pub struct StringPrint;
 
 impl DataProcess for StringPrint {
-    type Error = Error;
+    async fn process(&self, data: &[u8], result_sender: ResultSender) {
+        if let Err(e) = self.do_process(data).await {
+            result_sender.push_result(e).await;
+        } else {
+            result_sender.push_ok().await;
+        }
+    }
+}
 
-    async fn process(&self, data: &[u8]) -> Result<(), Self::Error> {
+impl StringPrint {
+    async fn do_process(&self, data: &[u8]) -> Result<(), Error> {
         let msg = from_utf8(data).map_err(|_| Error::DecodeError)?;
-
         info!("receive: {}", msg);
-
         Ok(())
     }
 }

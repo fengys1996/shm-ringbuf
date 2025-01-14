@@ -1,7 +1,7 @@
 use std::{str::from_utf8, sync::Arc, time::Duration};
 
 use shm_ringbuf::{
-    consumer::process::DataProcess,
+    consumer::process::{DataProcess, ResultSender},
     error::DataProcessResult,
     producer::{prealloc::PreAlloc, RingbufProducer},
 };
@@ -13,9 +13,17 @@ pub struct MsgForward {
 }
 
 impl DataProcess for MsgForward {
-    type Error = Error;
+    async fn process(&self, data: &[u8], result_sender: ResultSender) {
+        if let Err(e) = self.do_process(data).await {
+            result_sender.push_result(e).await;
+        } else {
+            result_sender.push_ok().await;
+        }
+    }
+}
 
-    async fn process(&self, data: &[u8]) -> Result<(), Self::Error> {
+impl MsgForward {
+    async fn do_process(&self, data: &[u8]) -> Result<(), Error> {
         let msg = from_utf8(data).map_err(|_| Error::DecodeError)?;
 
         let _ = self.sender.send(msg.to_string()).await;

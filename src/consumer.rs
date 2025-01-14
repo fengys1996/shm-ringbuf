@@ -3,13 +3,13 @@ pub mod settings;
 
 pub(crate) mod session_manager;
 
-use std::fmt::Debug;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
 use process::DataProcess;
+use process::ResultSender;
 use session_manager::SessionManager;
 use session_manager::SessionManagerRef;
 use session_manager::SessionRef;
@@ -86,10 +86,9 @@ impl RingbufConsumer {
     }
 
     /// Run the consumer, which will block the current thread.
-    pub async fn run<P, E>(&self, processor: P)
+    pub async fn run<P>(&self, processor: P)
     where
-        P: DataProcess<Error = E>,
-        E: Into<DataProcessResult> + Debug + Send,
+        P: DataProcess,
     {
         if self
             .started
@@ -153,14 +152,13 @@ impl RingbufConsumer {
     }
 
     /// The main loop to process the ringbufs.
-    async fn process_loop<P, E>(
+    async fn process_loop<P>(
         &self,
         processor: &P,
         interval: Duration,
         cancel: Option<CancellationToken>,
     ) where
-        P: DataProcess<Error = E>,
-        E: Into<DataProcessResult> + Debug + Send,
+        P: DataProcess,
     {
         loop {
             process_all_sessions(&self.session_manager, processor).await;
@@ -183,22 +181,20 @@ impl RingbufConsumer {
     }
 }
 
-async fn process_all_sessions<P, E>(
+async fn process_all_sessions<P>(
     session_manager: &SessionManagerRef,
     processor: &P,
 ) where
-    P: DataProcess<Error = E>,
-    E: Into<DataProcessResult>,
+    P: DataProcess,
 {
     for (_, session) in session_manager.iter() {
         process_session(&session, processor).await;
     }
 }
 
-async fn process_session<P, E>(session: &SessionRef, processor: &P)
+async fn process_session<P>(session: &SessionRef, processor: &P)
 where
-    P: DataProcess<Error = E>,
-    E: Into<DataProcessResult>,
+    P: DataProcess,
 {
     let ringbuf = session.ringbuf();
     let enable_checksum = session.enable_checksum();
@@ -227,11 +223,12 @@ where
             continue;
         }
 
-        if let Err(e) = processor.process(data_slice).await {
-            session.push_result(req_id, e).await;
-        } else {
-            session.push_ok(req_id).await;
-        }
+        let result_sender = ResultSender {
+            request_id: req_id,
+            session: session.clone(),
+        };
+
+        processor.process(data_slice, result_sender).await;
 
         unsafe { ringbuf.advance_consume_offset(data_block.total_len()) }
     }
