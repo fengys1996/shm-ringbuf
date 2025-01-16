@@ -55,6 +55,7 @@ impl RingbufProducer {
             heartbeat_interval,
             result_fetch_retry_interval,
             backed_file_path,
+            enable_checksum,
         } = settings;
 
         #[cfg(any(
