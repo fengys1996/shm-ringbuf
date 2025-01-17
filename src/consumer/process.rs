@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fmt::Debug;
 use std::future::Future;
 
@@ -6,9 +7,15 @@ use crate::error::DataProcessResult;
 use super::session_manager::SessionRef;
 
 pub trait DataProcess: Send + Sync {
+    type Message: Debug;
+
+    type Error: Error;
+
+    fn decode(&self, data: &[u8]) -> Result<Self::Message, Self::Error>;
+
     fn process(
         &self,
-        data: &[u8],
+        message: Self::Message,
         result_sender: ResultSender,
     ) -> impl Future<Output = ()>;
 }
