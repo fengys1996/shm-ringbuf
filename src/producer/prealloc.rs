@@ -15,7 +15,7 @@ use crate::ringbuf::DropGuard;
 /// The pre-allocated data block.
 pub struct PreAlloc {
     pub(super) data_block: DataBlock<DropGuard>,
-    pub(super) rx: Receiver<DataProcessResult>,
+    pub(super) rx: Option<Receiver<DataProcessResult>>,
     pub(super) enable_checksum: bool,
 }
 
@@ -48,8 +48,8 @@ impl PreAlloc {
     }
 
     /// Return a [`Handle`] to wait for the result of data processing.
-    pub fn wait_result(self) -> Handle {
-        Handle { rx: self.rx }
+    pub fn wait_result(self) -> Option<Handle> {
+        self.rx.map(|rx| Handle { rx })
     }
 }
 

@@ -204,13 +204,13 @@ pub async fn start_producer(options: StartProducerOptions) {
                 // Wait the result every 1000 messages.
                 if i % 1000 == 0 {
                     for join in joins.drain(..) {
-                        let result = join.await.unwrap();
+                        let result = join.unwrap().await.unwrap();
                         assert_eq!(result.status_code, 0);
                     }
                 }
                 if i == msg_num - 1 {
                     for join in joins.drain(..) {
-                        let result = join.await.unwrap();
+                        let result = join.unwrap().await.unwrap();
                         assert_eq!(result.status_code, 0);
                     }
                 }

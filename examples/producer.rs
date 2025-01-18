@@ -44,7 +44,7 @@ async fn main() {
 
         if i % 100 == 0 {
             for j in joins.drain(..) {
-                let _ = j.await;
+                let _ = j.unwrap().await;
             }
         }
 
@@ -54,7 +54,7 @@ async fn main() {
     }
 
     for j in joins {
-        let _ = j.await;
+        let _ = j.unwrap().await;
     }
 }
 
