@@ -123,34 +123,20 @@ impl ProducerSettingsBuilder {
             .backed_file_path
             .unwrap_or_else(|| PathBuf::from("/tmp/shm.sock"));
 
-        #[cfg(not(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "freebsd"
-        )))]
-        return ProducerSettings {
+        ProducerSettings {
             grpc_sock_path,
             fdpass_sock_path,
             ringbuf_len,
             heartbeat_interval,
+            enable_checksum,
             result_fetch_retry_interval,
+            #[cfg(not(any(
+                target_os = "linux",
+                target_os = "android",
+                target_os = "freebsd"
+            )))]
             backed_file_path,
-            enable_checksum,
-        };
-
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "freebsd"
-        ))]
-        return ProducerSettings {
-            grpc_sock_path,
-            fdpass_sock_path,
-            ringbuf_len,
-            heartbeat_interval,
-            enable_checksum,
-            result_fetch_retry_interval,
-        };
+        }
     }
 }
 

@@ -43,55 +43,32 @@ impl RingbufProducer {
     /// It will initially try to establish the required connection, and if fails,
     /// it will retry in the background.
     pub async fn new(settings: ProducerSettings) -> Result<RingbufProducer> {
-        #[cfg(not(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "freebsd"
-        )))]
         let ProducerSettings {
             grpc_sock_path,
             ringbuf_len,
             fdpass_sock_path,
             heartbeat_interval,
             result_fetch_retry_interval,
+            enable_checksum,
+            #[cfg(not(any(
+                target_os = "linux",
+                target_os = "android",
+                target_os = "freebsd"
+            )))]
             backed_file_path,
-            enable_checksum,
-        } = settings;
-
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "freebsd"
-        ))]
-        let ProducerSettings {
-            grpc_sock_path,
-            ringbuf_len,
-            fdpass_sock_path,
-            heartbeat_interval,
-            result_fetch_retry_interval,
-            enable_checksum,
         } = settings;
 
         let client_id = gen_client_id();
 
-        #[cfg(not(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "freebsd"
-        )))]
         let memfd = create_fd(Settings {
             name: client_id.clone(),
             size: ringbuf_len as u64,
+            #[cfg(not(any(
+                target_os = "linux",
+                target_os = "android",
+                target_os = "freebsd"
+            )))]
             path: backed_file_path,
-        })?;
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "freebsd"
-        ))]
-        let memfd = create_fd(Settings {
-            name: client_id.clone(),
-            size: ringbuf_len as u64,
         })?;
 
         let grpc_client = GrpcClient::new(&client_id, grpc_sock_path);
