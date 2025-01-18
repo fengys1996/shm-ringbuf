@@ -13,9 +13,9 @@ pub struct ProducerSettings {
     pub(super) fdpass_sock_path: PathBuf,
     pub(super) ringbuf_len: usize,
     pub(super) heartbeat_interval: Duration,
-    pub(super) result_fetch_enable: bool,
+    pub(super) enable_result_fetch: bool,
     pub(super) result_fetch_retry_interval: Duration,
-    pub(super) checksum_enable: bool,
+    pub(super) enable_checksum: bool,
     #[cfg(not(any(
         target_os = "linux",
         target_os = "android",
@@ -115,7 +115,7 @@ impl ProducerSettingsBuilder {
             .heartbeat_interval
             .unwrap_or(DEFAULT_HEARTBEAT_INTERVAL);
 
-        let result_fetch_enable = self.enable_result_fetch.unwrap_or(false);
+        let enable_result_fetch = self.enable_result_fetch.unwrap_or(false);
 
         let result_fetch_retry_interval = self
             .result_fetch_retry_interval
@@ -137,8 +137,8 @@ impl ProducerSettingsBuilder {
             fdpass_sock_path,
             ringbuf_len,
             heartbeat_interval,
-            checksum_enable: enable_checksum,
-            result_fetch_enable,
+            enable_checksum,
+            enable_result_fetch,
             result_fetch_retry_interval,
             #[cfg(not(any(
                 target_os = "linux",

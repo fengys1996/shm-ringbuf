@@ -34,7 +34,7 @@ pub struct RingbufProducer {
     cancel: CancellationToken,
     req_id: AtomicU32,
     result_fetcher: Option<ResultFetcher>,
-    checksum_enable: bool,
+    enable_checksum: bool,
 }
 
 impl RingbufProducer {
@@ -48,9 +48,9 @@ impl RingbufProducer {
             ringbuf_len,
             fdpass_sock_path,
             heartbeat_interval,
-            result_fetch_enable,
+            enable_result_fetch,
             result_fetch_retry_interval,
-            checksum_enable,
+            enable_checksum,
             #[cfg(not(any(
                 target_os = "linux",
                 target_os = "android",
@@ -75,7 +75,7 @@ impl RingbufProducer {
         let grpc_client = GrpcClient::new(&client_id, grpc_sock_path);
 
         let ringbuf = Ringbuf::new(&memfd)?;
-        ringbuf.set_checksum_flag(checksum_enable);
+        ringbuf.set_checksum_flag(enable_checksum);
         let ringbuf = RwLock::new(ringbuf);
 
         let online = Arc::new(AtomicBool::new(false));
@@ -98,7 +98,7 @@ impl RingbufProducer {
         let cancel_c = cancel.clone();
         tokio::spawn(async move { heartbeat.run(cancel_c).await });
 
-        let result_fetcher = if result_fetch_enable {
+        let result_fetcher = if enable_result_fetch {
             let rf = ResultFetcher::new(
                 grpc_client.clone(),
                 result_fetch_retry_interval,
@@ -116,7 +116,7 @@ impl RingbufProducer {
             cancel,
             req_id,
             result_fetcher,
-            checksum_enable,
+            enable_checksum,
         };
 
         Ok(producer)
@@ -139,7 +139,7 @@ impl RingbufProducer {
 
         let rx = self.result_fetcher.as_ref().map(|rf| rf.subscribe(req_id));
 
-        let enable_checksum = self.checksum_enable;
+        let enable_checksum = self.enable_checksum;
 
         let pre = PreAlloc {
             data_block,
