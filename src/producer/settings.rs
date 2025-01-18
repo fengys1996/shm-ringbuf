@@ -13,6 +13,7 @@ pub struct ProducerSettings {
     pub(super) fdpass_sock_path: PathBuf,
     pub(super) ringbuf_len: usize,
     pub(super) heartbeat_interval: Duration,
+    pub(super) enable_result_fetch: bool,
     pub(super) result_fetch_retry_interval: Duration,
     pub(super) enable_checksum: bool,
     #[cfg(not(any(
@@ -29,6 +30,7 @@ pub struct ProducerSettingsBuilder {
     fdpass_sock_path: Option<PathBuf>,
     ringbuf_len: Option<usize>,
     heartbeat_interval: Option<Duration>,
+    enable_result_fetch: Option<bool>,
     result_fetch_retry_interval: Option<Duration>,
     enable_checksum: Option<bool>,
     #[cfg(not(any(
@@ -70,6 +72,12 @@ impl ProducerSettingsBuilder {
         self
     }
 
+    /// Enable fetching the result of consumer processing data.
+    pub fn enable_result_fetch(mut self, enable: bool) -> Self {
+        self.enable_result_fetch = Some(enable);
+        self
+    }
+
     /// Set the interval for retrying to fetch the result.
     pub fn result_fetch_retry_interval(mut self, interval: Duration) -> Self {
         self.result_fetch_retry_interval = Some(interval);
@@ -108,6 +116,8 @@ impl ProducerSettingsBuilder {
             .heartbeat_interval
             .unwrap_or(DEFAULT_HEARTBEAT_INTERVAL);
 
+        let enable_result_fetch = self.enable_result_fetch.unwrap_or(true);
+
         let result_fetch_retry_interval = self
             .result_fetch_retry_interval
             .unwrap_or(DEFAULT_RESULT_FETCH_RETRY_INTERVAL);
@@ -129,6 +139,7 @@ impl ProducerSettingsBuilder {
             ringbuf_len,
             heartbeat_interval,
             enable_checksum,
+            enable_result_fetch,
             result_fetch_retry_interval,
             #[cfg(not(any(
                 target_os = "linux",

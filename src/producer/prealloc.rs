@@ -15,7 +15,7 @@ use crate::ringbuf::DropGuard;
 /// The pre-allocated data block.
 pub struct PreAlloc {
     pub(super) data_block: DataBlock<DropGuard>,
-    pub(super) rx: Receiver<DataProcessResult>,
+    pub(super) rx: Option<Receiver<DataProcessResult>>,
     pub(super) enable_checksum: bool,
 }
 
@@ -53,8 +53,9 @@ impl PreAlloc {
     }
 }
 
+/// The handle to wait for the result of data processing.
 pub struct Handle {
-    rx: Receiver<DataProcessResult>,
+    rx: Option<Receiver<DataProcessResult>>,
 }
 
 impl Future for Handle {
@@ -64,9 +65,13 @@ impl Future for Handle {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Self::Output> {
-        self.rx.poll_unpin(cx).map_err(|e| error::Error::Recv {
-            source: e,
-            location: snafu::location!(),
-        })
+        if let Some(rx) = self.rx.as_mut() {
+            rx.poll_unpin(cx).map_err(|e| error::Error::Recv {
+                source: e,
+                location: snafu::location!(),
+            })
+        } else {
+            Poll::Ready(error::ResultFetchDisabledSnafu.fail())
+        }
     }
 }

@@ -33,7 +33,7 @@ pub struct RingbufProducer {
     online: Arc<AtomicBool>,
     cancel: CancellationToken,
     req_id: AtomicU32,
-    result_fetcher: ResultFetcher,
+    result_fetcher: Option<ResultFetcher>,
     enable_checksum: bool,
 }
 
@@ -48,6 +48,7 @@ impl RingbufProducer {
             ringbuf_len,
             fdpass_sock_path,
             heartbeat_interval,
+            enable_result_fetch,
             result_fetch_retry_interval,
             enable_checksum,
             #[cfg(not(any(
@@ -97,11 +98,17 @@ impl RingbufProducer {
         let cancel_c = cancel.clone();
         tokio::spawn(async move { heartbeat.run(cancel_c).await });
 
-        let result_fetcher = ResultFetcher::new(
-            grpc_client.clone(),
-            result_fetch_retry_interval,
-        )
-        .await;
+        let result_fetcher = if enable_result_fetch {
+            Some(
+                ResultFetcher::new(
+                    grpc_client.clone(),
+                    result_fetch_retry_interval,
+                )
+                .await,
+            )
+        } else {
+            None
+        };
 
         let producer = RingbufProducer {
             ringbuf,
@@ -131,7 +138,11 @@ impl RingbufProducer {
         let data_block =
             self.ringbuf.write().unwrap().reserve(bytes, req_id)?;
 
-        let rx = self.result_fetcher.subscribe(req_id);
+        let rx = self
+            .result_fetcher
+            .as_ref()
+            .map(|fetcher| fetcher.subscribe(req_id));
+
         let enable_checksum = self.enable_checksum;
 
         let pre = PreAlloc {
@@ -168,9 +179,14 @@ impl RingbufProducer {
         self.online.load(Ordering::Relaxed)
     }
 
-    /// Check if the gRPC stream which fetch execution results is created .
+    /// Check if the gRPC stream which fetch execution results is created.
+    /// If disabled the result fetch in producer settings, we also consider it
+    /// as normal.
     pub fn result_fetch_normal(&self) -> bool {
-        self.result_fetcher.is_normal()
+        self.result_fetcher
+            .as_ref()
+            .map(|fetcher| fetcher.is_normal())
+            .unwrap_or(true)
     }
 
     /// Generate a request id.
