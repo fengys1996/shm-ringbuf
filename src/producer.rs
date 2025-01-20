@@ -141,7 +141,8 @@ impl RingbufProducer {
         let rx = self
             .result_fetcher
             .as_ref()
-            .map(|fetcher| fetcher.subscribe(req_id));
+            .map(|fetcher| fetcher.subscribe(req_id))
+            .transpose()?;
 
         let enable_checksum = self.enable_checksum;
 

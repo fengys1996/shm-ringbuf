@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dashmap::DashMap;
+use snafu::ensure;
 use snafu::ResultExt;
 use tokio::sync::oneshot::channel;
 use tokio::sync::oneshot::Receiver;
@@ -85,11 +86,17 @@ impl ResultFetcher {
         ResultFetcher { inner }
     }
 
-    /// Subscribe to the result set corresponding to the request id.
-    pub fn subscribe(&self, request_id: u32) -> Receiver<DataProcessResult> {
+    /// Subscribe to the result set corresponding to the request id. If the result
+    /// fetcher is not ready, an error will be returned.
+    pub fn subscribe(
+        &self,
+        request_id: u32,
+    ) -> Result<Receiver<DataProcessResult>> {
+        ensure!(self.is_normal(), error::ResultFetchNotReadySnafu);
+
         let (tx, rx) = channel();
         self.inner.subscriptions.insert(request_id, tx);
-        rx
+        Ok(rx)
     }
 
     /// Check if the result fetcher is working normally.
