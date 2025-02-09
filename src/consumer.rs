@@ -196,8 +196,13 @@ async fn process_session<P>(session: &SessionRef, processor: &P)
 where
     P: DataProcess,
 {
-    let ringbuf = session.ringbuf();
-    let enable_checksum = session.enable_checksum();
+    if !session.is_ready() {
+        return;
+    }
+
+    // Unwrap is safe here because the session is ready.
+    let ringbuf = session.ringbuf().unwrap();
+    let enable_checksum = ringbuf.checksum_flag();
 
     while let Some(data_block) = ringbuf.peek() {
         if data_block.is_busy() {

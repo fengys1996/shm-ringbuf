@@ -101,12 +101,6 @@ pub enum Error {
         location: Location,
     },
 
-    #[snafu(display("The corresponding fd was not found"))]
-    NotFoundRingbuf {
-        #[snafu(implicit)]
-        location: Location,
-    },
-
     #[snafu(display("Server unavailable"))]
     ServerUnavailable {
         #[snafu(implicit)]

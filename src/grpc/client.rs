@@ -14,8 +14,8 @@ use super::proto::shm_control_client::ShmControlClient;
 use super::proto::FetchResultRequest;
 use super::proto::NotifyRequest;
 use super::proto::PingRequest;
+use super::proto::PingResponse;
 use super::proto::ResultSet;
-use super::status_code::StatusCode;
 use crate::error;
 use crate::error::Result;
 
@@ -73,7 +73,7 @@ impl GrpcClient {
     }
 
     /// Check if the server is available.
-    pub async fn ping(&self) -> Result<()> {
+    pub async fn ping(&self) -> Result<PingResponse> {
         let ping_req = PingRequest {
             producer_id: self.client_id.clone(),
         };
@@ -84,7 +84,7 @@ impl GrpcClient {
             .context(error::TonicSnafu {})?
             .into_inner();
 
-        check_error(resp.status_code, resp.status_message)
+        Ok(resp)
     }
 
     pub async fn fetch_result(&self) -> Result<Streaming<ResultSet>> {
@@ -99,21 +99,5 @@ impl GrpcClient {
             .into_inner();
 
         Ok(result_stream)
-    }
-}
-
-fn check_error(status_code: u32, _status_msg: String) -> Result<()> {
-    let Ok(status) = StatusCode::try_from(status_code) else {
-        return error::InvalidParameterSnafu {
-            detail: format!("convert {} to status code", status_code),
-        }
-        .fail();
-    };
-
-    match status {
-        StatusCode::Success => Ok(()),
-        // MissingFd requires special handling. If the client finds this error,
-        // it needs to re_send memfd to the shm_server.
-        StatusCode::MissingFD => error::NotFoundRingbufSnafu.fail(),
     }
 }

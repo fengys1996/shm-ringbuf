@@ -9,7 +9,6 @@ use tracing::info;
 use tracing::warn;
 
 use super::SessionHandleRef;
-use crate::error;
 use crate::grpc::client::GrpcClient;
 
 /// Heartbeat service is used to keep the connection between the consumer and
@@ -38,29 +37,31 @@ impl Heartbeat {
         }
     }
 
+    // TODO: refactor it
     pub async fn ping(&self) {
-        let Err(e) = self.client.ping().await else {
-            self.set_online(true);
-            return;
-        };
-
-        if matches!(e, error::Error::NotFoundRingbuf { .. }) {
-            if let Err(e) = self.session_handle.send().await {
-                warn!(
-                    "not found ringbuf, failed to re-send session, error: {:?}",
-                    e
-                );
-                self.set_online(false);
-            } else {
-                info!("not found ringbuf, re-send session success");
-                self.set_online(true);
+        match self.client.ping().await {
+            Ok(resp) => {
+                if resp.missing_memfd {
+                    if let Err(e) = self.session_handle.send().await {
+                        warn!(
+                            "not found ringbuf, failed to re-send session, error: {:?}",
+                            e
+                        );
+                        self.set_online(false);
+                    } else {
+                        info!("not found ringbuf, re-send session success");
+                        self.set_online(true);
+                    }
+                } else {
+                    self.set_online(true);
+                }
+                return;
             }
-
-            return;
+            Err(e) => {
+                warn!("failed to ping, error: {:?}", e);
+                self.set_online(false);
+            }
         }
-
-        warn!("failed to ping, error: {:?}", e);
-        self.set_online(false);
     }
 
     fn set_online(&self, online: bool) {

@@ -24,7 +24,7 @@ use super::proto::shm_control_server::ShmControl;
 use super::proto::shm_control_server::ShmControlServer;
 use super::proto::NotifyRequest;
 use super::proto::PingRequest;
-use super::status_code::StatusCode;
+use crate::consumer::session_manager::Session;
 use crate::consumer::session_manager::SessionManagerRef;
 use crate::error;
 use crate::error::Result;
@@ -118,22 +118,18 @@ impl ShmControl for ShmCtlHandler {
         request: Request<PingRequest>,
     ) -> StdResult<Response<proto::PingResponse>, Status> {
         let PingRequest { producer_id } = request.into_inner();
+        let mut missing_memfd = false;
 
-        if self.session_manager.get(&producer_id).is_none() {
-            let resp = proto::PingResponse {
-                status_code: StatusCode::MissingFD as u32,
-                status_message: "ringbuf was not found".to_string(),
-            };
+        self.session_manager
+            .sessions
+            .entry(producer_id.clone())
+            .or_insert_with(|| {
+                missing_memfd = true;
+                Arc::new(Session::new(producer_id))
+            });
 
-            return Ok(Response::new(resp));
-        }
-
-        let resp = proto::PingResponse {
-            status_code: StatusCode::Success as u32,
-            status_message: "".to_string(),
-        };
-
-        Ok(Response::new(resp))
+        let resp = proto::PingResponse { missing_memfd };
+        return Ok(Response::new(resp));
     }
 
     type FetchResultStream = Pin<
