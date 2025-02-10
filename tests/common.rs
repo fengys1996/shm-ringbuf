@@ -114,12 +114,12 @@ pub async fn wait_consumer_online(
 pub fn gen_str(min_len: usize, max_len: usize) -> String {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789)(*&^%$#@!~";
 
-    let len = rand::random::<usize>() % (max_len - min_len) + min_len;
+    let len = rand::random::<u32>() as usize % (max_len - min_len) + min_len;
 
     let mut s = String::new();
 
     for _ in 0..len {
-        s.push(CHARSET[rand::random::<usize>() % CHARSET.len()] as char);
+        s.push(CHARSET[rand::random::<u32>() as usize % CHARSET.len()] as char);
     }
 
     s

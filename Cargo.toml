@@ -37,7 +37,7 @@ tracing = { version = "0.1" }
 
 [dev-dependencies]
 criterion = { version = "0.5" }
-rand = { version = "0.8" }
+rand = { version = "0.9" }
 tempfile = { version = "3.14" }
 tracing-subscriber = { version = "0.3" }
 
