@@ -22,6 +22,10 @@ async fn main() {
 
     let mut joins = Vec::with_capacity(100);
     for i in 0..10000 {
+        wait_consumer_ready(&producer, 20 * 5, Duration::from_secs(3))
+            .await
+            .unwrap();
+
         let mut pre_alloc =
             reserve_with_retry(&producer, 20, 3, Duration::from_secs(1))
                 .await
@@ -29,10 +33,6 @@ async fn main() {
 
         let write_str = format!("hello, {}", i);
         info!("write: {}", write_str);
-
-        wait_consumer_online(&producer, 20 * 5, Duration::from_secs(3))
-            .await
-            .unwrap();
 
         pre_alloc.write(write_str.as_bytes()).unwrap();
 
@@ -81,7 +81,7 @@ async fn reserve_with_retry(
     Err("reserve failed".to_string())
 }
 
-async fn wait_consumer_online(
+async fn wait_consumer_ready(
     p: &RingbufProducer,
     retry_num: usize,
     retry_interval: Duration,
