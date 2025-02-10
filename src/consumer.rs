@@ -196,8 +196,11 @@ async fn process_session<P>(session: &SessionRef, processor: &P)
 where
     P: DataProcess,
 {
-    let ringbuf = session.ringbuf();
-    let enable_checksum = session.enable_checksum();
+    let Some(ringbuf) = session.ringbuf() else {
+        return;
+    };
+
+    let enable_checksum = ringbuf.checksum_flag();
 
     while let Some(data_block) = ringbuf.peek() {
         if data_block.is_busy() {

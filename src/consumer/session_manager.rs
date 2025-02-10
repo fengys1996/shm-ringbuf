@@ -18,8 +18,7 @@ use crate::ringbuf::Ringbuf;
 /// information.
 pub struct Session {
     client_id: ClientId,
-    ringbuf: Ringbuf,
-    enable_checksum: bool,
+    ringbuf: RwLock<Option<Arc<Ringbuf>>>,
     /// Send the results of data processing to the producer.
     result_sender: RwLock<Option<Sender<StdResult<proto::ResultSet, Status>>>>,
 }
@@ -27,29 +26,22 @@ pub type SessionRef = Arc<Session>;
 
 impl Session {
     /// Create a new session.
-    pub fn new(client_id: ClientId, ringbuf: Ringbuf) -> Self {
-        let enable_checksum = ringbuf.checksum_flag();
+    pub fn new(client_id: ClientId) -> Self {
         Self {
             client_id,
-            ringbuf,
+            ringbuf: RwLock::new(None),
             result_sender: RwLock::new(None),
-            enable_checksum,
         }
     }
 
     /// Get the ringbuf of the session.
-    pub fn ringbuf(&self) -> &Ringbuf {
-        &self.ringbuf
+    pub fn ringbuf(&self) -> Option<Arc<Ringbuf>> {
+        self.ringbuf.read().unwrap().clone()
     }
 
     /// Get the client id of the session.
     pub fn client_id(&self) -> &ClientId {
         &self.client_id
-    }
-
-    /// Whether to enable checksum.
-    pub fn enable_checksum(&self) -> bool {
-        self.enable_checksum
     }
 
     /// Push an OK result to the producer.
@@ -112,19 +104,30 @@ impl SessionManager {
         Self { sessions: cache }
     }
 
+    /// Set the ringbuf of the session. If the session does not exist, it will
+    /// be created first.
+    pub fn set_ringbuf(&self, id: &ClientId, ringbuf: Arc<Ringbuf>) {
+        let entry = self
+            .sessions
+            .entry(id.clone())
+            .or_insert_with(|| Arc::new(Session::new(id.clone())));
+
+        entry.value().ringbuf.write().unwrap().replace(ringbuf);
+    }
+
+    /// Set the result sender of the session. If the session does not exist, it
+    /// will be created first.
     pub fn set_result_sender(
         &self,
         id: &ClientId,
         sender: Sender<std::result::Result<proto::ResultSet, Status>>,
     ) {
-        if let Some(session) = self.sessions.get(id) {
-            session.result_sender.write().unwrap().replace(sender);
-        }
-    }
+        let entry = self
+            .sessions
+            .entry(id.clone())
+            .or_insert_with(|| Arc::new(Session::new(id.clone())));
 
-    /// Insert a session into the session manager.
-    pub fn insert(&self, key: impl Into<ClientId>, session: SessionRef) {
-        self.sessions.insert(key.into(), session);
+        entry.value().result_sender.write().unwrap().replace(sender);
     }
 
     /// Get a session from the session manager and refresh the tti.

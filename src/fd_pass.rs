@@ -5,7 +5,6 @@ use std::os::fd::FromRawFd;
 use std::path::Path;
 use std::path::PathBuf;
 use std::pin::pin;
-use std::sync::Arc;
 use std::time::Duration;
 
 use passfd::tokio::FdPassingExt;
@@ -19,7 +18,6 @@ use tokio::net::UnixStream;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
-use crate::consumer::session_manager::Session;
 use crate::consumer::session_manager::SessionManagerRef;
 use crate::error;
 use crate::error::Result;
@@ -181,9 +179,8 @@ impl Handler {
         // 5. Create the ringbuf.
         let ringbuf = Ringbuf::from(&file)?;
 
-        // 6. Store the ringbuf to ringbuf store.
-        let session = Arc::new(Session::new(client_id.clone(), ringbuf));
-        self.session_manager.insert(client_id, session);
+        // 6. Set the ringbuf to the session manager.
+        self.session_manager.set_ringbuf(&client_id, ringbuf.into());
 
         Ok(())
     }
