@@ -162,6 +162,16 @@ pub enum Error {
         #[snafu(implicit)]
         location: Location,
     },
+
+    #[snafu(display(
+        "Failed to build ringbuf in consumer, detail: {}",
+        detail
+    ))]
+    RingbufBuild {
+        detail: String,
+        #[snafu(implicit)]
+        location: Location,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

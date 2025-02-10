@@ -25,6 +25,11 @@ use crate::error;
 use crate::error::Result;
 use crate::ringbuf::Ringbuf;
 
+/// Ringbuf is ready in consumer.
+pub const RINGBUF_READY: u32 = 0;
+/// Ringbuf is not ready in consumer.
+pub const RINGBUF_NOT_READY: u32 = 1;
+
 /// The server for receiving fd from producer, create Ringbuf, and add the Ringbuf
 /// to RingbufStore.
 pub struct FdRecvServer<F> {
@@ -125,9 +130,7 @@ where
         };
 
         tokio::spawn(async move {
-            if let Err(e) = handler.handle().await {
-                error!("handle error: {}", e);
-            }
+            handler.handle().await;
         });
 
         Ok(())
@@ -140,7 +143,19 @@ struct Handler {
 }
 
 impl Handler {
-    async fn handle(&mut self) -> Result<()> {
+    async fn handle(&mut self) {
+        if let Err(e) = self.do_handle().await {
+            error!("handle error: {}", e);
+            let ret = write_err(&mut self.stream, e.to_string()).await;
+            if let Err(e) = ret {
+                error!("failed to write error to unix stream, err: {}", e);
+            }
+        } else if let Err(e) = write_ok(&mut self.stream).await {
+            error!("failed to write ok to unix stream, err: {}", e);
+        }
+    }
+
+    async fn do_handle(&mut self) -> Result<()> {
         let stream = &mut self.stream;
 
         // 1. Read the length of client id.
@@ -225,7 +240,53 @@ pub async fn send_fd(
     stream
         .send_fd(file.as_raw_fd())
         .await
+        .context(error::IoSnafu)?;
+
+    match read_status(&mut stream).await? {
+        RINGBUF_READY => Ok(()),
+        _ => {
+            let detail = read_err(&mut stream).await?;
+            error::RingbufBuildSnafu { detail }.fail()
+        }
+    }
+}
+
+/// Write the error msg to the unix stream.
+async fn write_err<S: AsyncWriteExt + Unpin>(
+    stream: &mut S,
+    err: String,
+) -> Result<()> {
+    let detail = err.as_bytes();
+    stream
+        .write_u32(RINGBUF_NOT_READY)
+        .await
+        .context(error::IoSnafu)?;
+    stream
+        .write_u32(detail.len() as u32)
+        .await
+        .context(error::IoSnafu)?;
+    stream.write_all(detail).await.context(error::IoSnafu)
+}
+
+/// Write the ok status to the unix stream.
+async fn write_ok<S: AsyncWriteExt + Unpin>(stream: &mut S) -> Result<()> {
+    stream
+        .write_u32(RINGBUF_READY)
+        .await
         .context(error::IoSnafu)
+}
+
+/// Read the status from the unix stream.
+async fn read_status<S: AsyncReadExt + Unpin>(stream: &mut S) -> Result<u32> {
+    stream.read_u32().await.context(error::IoSnafu)
+}
+
+/// Read the error msg from the unix stream.
+async fn read_err<S: AsyncReadExt + Unpin>(stream: &mut S) -> Result<String> {
+    let len = stream.read_u32().await.context(error::IoSnafu)?;
+    let mut buf = vec![0; len as usize];
+    stream.read_exact(&mut buf).await.context(error::IoSnafu)?;
+    String::from_utf8(buf).context(error::FromUtf8Snafu)
 }
 
 #[cfg(test)]
@@ -233,12 +294,16 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
+    use tokio::io::simplex;
     use tokio::time::sleep;
     use tokio_util::sync::CancellationToken;
 
     use super::send_fd;
     use crate::consumer::session_manager::SessionManager;
-    use crate::fd_pass::FdRecvServer;
+    use crate::fd_pass::{
+        read_err, read_status, write_err, write_ok, FdRecvServer,
+        RINGBUF_NOT_READY, RINGBUF_READY,
+    };
     use crate::ringbuf::min_ringbuf_len;
 
     #[tokio::test]
@@ -295,5 +360,27 @@ mod tests {
         }
 
         cancel.cancel();
+    }
+
+    #[tokio::test]
+    async fn test_read_write_ok() {
+        let (mut receiver, mut sender) = simplex(1024);
+        write_ok(&mut sender).await.unwrap();
+        let status = read_status(&mut receiver).await.unwrap();
+        assert_eq!(status, RINGBUF_READY);
+    }
+
+    #[tokio::test]
+    async fn test_read_write_err() {
+        let (mut receiver, mut sender) = simplex(1024);
+        let err = "error".to_string();
+        let err_c = err.clone();
+
+        let _ = write_err(&mut sender, err_c).await;
+        let status = read_status(&mut receiver).await.unwrap();
+        assert_eq!(status, RINGBUF_NOT_READY);
+
+        let actual = read_err(&mut receiver).await.unwrap();
+        assert_eq!(err, actual);
     }
 }
