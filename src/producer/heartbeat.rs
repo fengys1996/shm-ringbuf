@@ -55,7 +55,6 @@ impl Heartbeat {
                 } else {
                     self.set_online(true);
                 }
-                return;
             }
             Err(e) => {
                 warn!("failed to ping, error: {:?}", e);

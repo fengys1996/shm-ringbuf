@@ -23,12 +23,14 @@ use crate::error::Result;
 pub struct GrpcClient {
     client_id: String,
     channel: Channel,
+    enable_result_fetch: bool,
 }
 
 impl GrpcClient {
     pub fn new(
         producer_id: impl Into<String>,
         sock_path: impl Into<PathBuf>,
+        enable_result_fetch: bool,
     ) -> GrpcClient {
         let producer_id = producer_id.into();
         let sock_path = sock_path.into();
@@ -52,6 +54,7 @@ impl GrpcClient {
         GrpcClient {
             client_id: producer_id,
             channel,
+            enable_result_fetch,
         }
     }
 }
@@ -76,6 +79,7 @@ impl GrpcClient {
     pub async fn ping(&self) -> Result<PingResponse> {
         let ping_req = PingRequest {
             producer_id: self.client_id.clone(),
+            enable_result_fetch: self.enable_result_fetch,
         };
 
         let resp = ShmControlClient::new(self.channel.clone())

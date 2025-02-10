@@ -24,6 +24,7 @@ use super::proto::shm_control_server::ShmControl;
 use super::proto::shm_control_server::ShmControlServer;
 use super::proto::NotifyRequest;
 use super::proto::PingRequest;
+use crate::consumer::session_manager::Options;
 use crate::consumer::session_manager::Session;
 use crate::consumer::session_manager::SessionManagerRef;
 use crate::error;
@@ -117,7 +118,10 @@ impl ShmControl for ShmCtlHandler {
         &self,
         request: Request<PingRequest>,
     ) -> StdResult<Response<proto::PingResponse>, Status> {
-        let PingRequest { producer_id } = request.into_inner();
+        let PingRequest {
+            producer_id,
+            enable_result_fetch,
+        } = request.into_inner();
         let mut missing_memfd = false;
 
         self.session_manager
@@ -125,7 +129,10 @@ impl ShmControl for ShmCtlHandler {
             .entry(producer_id.clone())
             .or_insert_with(|| {
                 missing_memfd = true;
-                Arc::new(Session::new(producer_id))
+                let opts = Options {
+                    enable_result_fetch,
+                };
+                Arc::new(Session::new(producer_id, opts))
             });
 
         let resp = proto::PingResponse { missing_memfd };

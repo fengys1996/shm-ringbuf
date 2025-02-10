@@ -20,17 +20,27 @@ use crate::ringbuf::Ringbuf;
 pub struct Session {
     client_id: ClientId,
     ringbuf: RwLock<Option<Arc<Ringbuf>>>,
-    /// Send the results of data processing to the producer.
+    /// Whether the producer enables the result fetch.
+    enable_result_fetch: bool,
+    /// Send the results of data processing to the producer. If result_fetch is
+    /// disabled in producer, this field will be None.
     result_sender: RwLock<Option<Sender<StdResult<proto::ResultSet, Status>>>>,
 }
 pub type SessionRef = Arc<Session>;
 
+#[derive(Debug, Default)]
+pub struct Options {
+    /// Whether the producer enables the result fetch.
+    pub enable_result_fetch: bool,
+}
+
 impl Session {
     /// Create a new session.
-    pub fn new(client_id: ClientId) -> Self {
+    pub fn new(client_id: ClientId, opts: Options) -> Self {
         Self {
             client_id,
             ringbuf: RwLock::new(None),
+            enable_result_fetch: opts.enable_result_fetch,
             result_sender: RwLock::new(None),
         }
     }

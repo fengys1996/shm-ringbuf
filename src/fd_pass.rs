@@ -234,7 +234,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::send_fd;
-    use crate::consumer::session_manager::{Session, SessionManager};
+    use crate::consumer::session_manager::{Options, Session, SessionManager};
     use crate::fd_pass::FdRecvServer;
     use crate::ringbuf::min_ringbuf_len;
 
@@ -249,7 +249,7 @@ mod tests {
         // after the handshake(ping once).
         for i in 0..100 {
             let client_id = format!("client_id_{}", i);
-            let session = Session::new(client_id.clone());
+            let session = Session::new(client_id.clone(), Options::default());
             session_manager.insert(session.into());
         }
 

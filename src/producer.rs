@@ -72,7 +72,8 @@ impl RingbufProducer {
             path: backed_file_path,
         })?;
 
-        let grpc_client = GrpcClient::new(&client_id, grpc_sock_path);
+        let grpc_client =
+            GrpcClient::new(&client_id, grpc_sock_path, enable_result_fetch);
 
         let ringbuf = Ringbuf::new(&memfd)?;
         ringbuf.set_checksum_flag(enable_checksum);
