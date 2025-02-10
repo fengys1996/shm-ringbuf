@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::result::Result as StdResult;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -45,9 +44,11 @@ impl Session {
         }
     }
 
+    /// Check if the session is ready for data processing.
     pub fn is_ready(&self) -> bool {
         self.ringbuf.read().unwrap().is_some()
-            && self.result_sender.read().unwrap().is_some()
+            && (self.result_sender.read().unwrap().is_some()
+                || !self.enable_result_fetch)
     }
 
     /// Get the client id of the session.
@@ -134,12 +135,14 @@ impl SessionManager {
     }
 
     /// Insert a session into the session manager.
+    #[allow(dead_code)]
     pub fn insert(&self, session: SessionRef) {
         let key = session.client_id().clone();
         self.sessions.insert(key, session);
     }
 
     /// Get a session from the session manager and refresh the tti.
+    #[allow(dead_code)]
     pub fn get(&self, key: &ClientId) -> Option<SessionRef> {
         self.sessions.get(key)
     }

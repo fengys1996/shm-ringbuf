@@ -136,7 +136,7 @@ impl ShmControl for ShmCtlHandler {
             });
 
         let resp = proto::PingResponse { missing_memfd };
-        return Ok(Response::new(resp));
+        Ok(Response::new(resp))
     }
 
     type FetchResultStream = Pin<
