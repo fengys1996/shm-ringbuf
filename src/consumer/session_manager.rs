@@ -124,8 +124,9 @@ impl SessionManager {
     }
 
     /// Insert a session into the session manager.
-    pub fn insert(&self, key: impl Into<ClientId>, session: SessionRef) {
-        self.sessions.insert(key.into(), session);
+    pub fn insert(&self, session: SessionRef) {
+        let key = session.client_id().clone();
+        self.sessions.insert(key, session);
     }
 
     /// Get a session from the session manager and refresh the tti.
