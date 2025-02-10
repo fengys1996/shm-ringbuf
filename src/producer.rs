@@ -1,3 +1,4 @@
+mod connection;
 pub mod prealloc;
 pub mod settings;
 
