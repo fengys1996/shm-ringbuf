@@ -19,8 +19,8 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
-use crate::error::DataProcessResult;
 use crate::error::CHECKSUM_MISMATCH;
+use crate::error::{DataProcessResult, DECODE_ERROR};
 use crate::fd_pass::FdRecvServer;
 use crate::grpc::proto::shm_control_server::ShmControlServer;
 use crate::grpc::server::ShmCtlHandler;
@@ -231,8 +231,22 @@ where
             session: session.clone(),
         };
 
-        processor.process(data_slice, result_sender).await;
+        let result = processor.decode(data_slice);
 
         unsafe { ringbuf.advance_consume_offset(data_block.total_len()) }
+        drop(data_block);
+
+        match result {
+            Ok(message) => {
+                processor.process(message, result_sender).await;
+            }
+            Err(e) => {
+                let result = DataProcessResult {
+                    status_code: DECODE_ERROR,
+                    message: e.to_string(),
+                };
+                result_sender.push_result(result).await;
+            }
+        };
     }
 }

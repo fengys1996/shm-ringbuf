@@ -1,10 +1,10 @@
-use std::{str::from_utf8, sync::Arc, time::Duration};
-
 use shm_ringbuf::{
     consumer::process::{DataProcess, ResultSender},
     error::DataProcessResult,
     producer::{prealloc::PreAlloc, RingbufProducer},
 };
+use std::fmt::{Display, Formatter};
+use std::{sync::Arc, time::Duration};
 use tokio::{sync::mpsc::Sender, time::sleep};
 use tracing::{error, warn};
 
@@ -13,8 +13,15 @@ pub struct MsgForward {
 }
 
 impl DataProcess for MsgForward {
-    async fn process(&self, data: &[u8], result_sender: ResultSender) {
-        if let Err(e) = self.do_process(data).await {
+    type Message = String;
+    type Error = Error;
+
+    fn decode(&self, data: &[u8]) -> Result<Self::Message, Self::Error> {
+        String::from_utf8(data.to_vec()).map_err(|_| Error::DecodeError)
+    }
+
+    async fn process(&self, msg: Self::Message, result_sender: ResultSender) {
+        if let Err(e) = self.do_process(&msg).await {
             result_sender.push_result(e).await;
         } else {
             result_sender.push_ok().await;
@@ -23,9 +30,7 @@ impl DataProcess for MsgForward {
 }
 
 impl MsgForward {
-    async fn do_process(&self, data: &[u8]) -> Result<(), Error> {
-        let msg = from_utf8(data).map_err(|_| Error::DecodeError)?;
-
+    async fn do_process(&self, msg: &str) -> Result<(), Error> {
         let _ = self.sender.send(msg.to_string()).await;
 
         Ok(())
@@ -62,6 +67,14 @@ impl From<Error> for DataProcessResult {
         }
     }
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message())
+    }
+}
+
+impl std::error::Error for Error {}
 
 pub fn msg_num() -> usize {
     std::env::var("MSG_NUM")
