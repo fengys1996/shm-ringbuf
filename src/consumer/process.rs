@@ -7,7 +7,7 @@ use crate::error::DataProcessResult;
 use super::session_manager::SessionRef;
 
 pub trait DataProcess: Send + Sync {
-    type Message: Debug;
+    type Message;
 
     type Error: Error;
 
