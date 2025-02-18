@@ -78,6 +78,7 @@ impl ResultFetcher {
                 };
 
                 fetcher.inner.normal.store(false, Ordering::Relaxed);
+                fetcher.inner.subscriptions.clear();
                 sleep(fetcher.inner.retry_interval).await;
             }
         });
