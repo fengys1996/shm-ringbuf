@@ -115,6 +115,12 @@ impl ResultFetcher {
 
         let (tx, rx) = channel();
         self.inner.subscriptions.insert(request_id, tx);
+        let expired_at = Instant::now() + Duration::from_secs(5);
+        self.inner
+            .expirations
+            .write()
+            .unwrap()
+            .push_back((request_id, expired_at));
         Ok(rx)
     }
 
