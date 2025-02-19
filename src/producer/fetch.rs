@@ -1,7 +1,10 @@
+use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
+use std::time::Instant;
 
 use dashmap::DashMap;
 use snafu::ensure;
@@ -34,6 +37,7 @@ struct Inner {
     retry_interval: Duration,
     normal: AtomicBool,
     subscriptions: DashMap<RequestId, Sender<DataProcessResult>>,
+    expirations: RwLock<VecDeque<(RequestId, Instant)>>,
 }
 
 impl ResultFetcher {
@@ -43,18 +47,34 @@ impl ResultFetcher {
     ) -> ResultFetcher {
         let normal = AtomicBool::new(false);
         let subscriptions = DashMap::new();
+        let expirations = RwLock::new(VecDeque::new());
 
         let inner = Inner {
             grpc_client,
             retry_interval,
             normal,
             subscriptions,
+            expirations,
         };
         let inner = Arc::new(inner);
 
         let fetcher = ResultFetcher {
             inner: inner.clone(),
         };
+
+        let inner_c = inner.clone();
+        tokio::spawn(async move {
+            loop {
+                {
+                    let mut expirations = inner_c.expirations.write().unwrap();
+                    clean_expired_subscriptions(
+                        &inner_c.subscriptions,
+                        &mut expirations,
+                    );
+                }
+                sleep(Duration::from_secs(1)).await;
+            }
+        });
 
         // Try to fetch the result stream and update the normal flag immediately.
         let may_stream = fetcher.inner.grpc_client.fetch_result().await;
@@ -78,7 +98,6 @@ impl ResultFetcher {
                 };
 
                 fetcher.inner.normal.store(false, Ordering::Relaxed);
-                fetcher.inner.subscriptions.clear();
                 sleep(fetcher.inner.retry_interval).await;
             }
         });
@@ -135,5 +154,23 @@ impl ResultFetcher {
                 let _ = sender.send(result);
             }
         }
+    }
+}
+
+fn clean_expired_subscriptions<S>(
+    subscriptions: &DashMap<RequestId, S>,
+    expirations: &mut VecDeque<(RequestId, Instant)>,
+) {
+    let now = Instant::now();
+
+    while let Some((req_id, expiration)) = expirations.front() {
+        let req_id = *req_id;
+
+        if *expiration > now {
+            break;
+        }
+
+        expirations.pop_front();
+        subscriptions.remove(&req_id);
     }
 }
