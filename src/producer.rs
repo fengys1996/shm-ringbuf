@@ -49,7 +49,9 @@ impl RingbufProducer {
             fdpass_sock_path,
             heartbeat_interval,
             enable_result_fetch,
-            result_fetch_retry_interval,
+            reconnect_interval,
+            expired_check_interval,
+            subscription_ttl,
             enable_checksum,
             #[cfg(not(any(
                 target_os = "linux",
@@ -95,14 +97,18 @@ impl RingbufProducer {
             session_handle: Arc::new(session_handle),
         };
         heartbeat.ping().await;
-        let cancel_c = cancel.clone();
+        let cancel_c = cancel.child_token();
         tokio::spawn(async move { heartbeat.run(cancel_c).await });
 
+        let cancel_c = cancel.child_token();
         let result_fetcher = if enable_result_fetch {
             Some(
                 ResultFetcher::new(
                     grpc_client.clone(),
-                    result_fetch_retry_interval,
+                    reconnect_interval,
+                    expired_check_interval,
+                    subscription_ttl,
+                    cancel_c,
                 )
                 .await,
             )

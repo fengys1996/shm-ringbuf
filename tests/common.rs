@@ -147,6 +147,8 @@ pub struct StartProducerOptions {
     pub max_msg_len: usize,
     pub notify_threshold: Option<u32>,
     pub msg_prefix: Option<String>,
+    pub write_delay: Option<Duration>,
+    pub expected_status_code: u32,
 }
 
 pub async fn start_producer(options: StartProducerOptions) {
@@ -159,6 +161,8 @@ pub async fn start_producer(options: StartProducerOptions) {
         max_msg_len,
         notify_threshold,
         msg_prefix,
+        write_delay,
+        expected_status_code,
     } = options;
 
     tokio::spawn(async move {
@@ -169,6 +173,10 @@ pub async fn start_producer(options: StartProducerOptions) {
         };
 
         for i in 0..msg_num {
+            wait_consumer_online(&producer, 5, Duration::from_secs(3))
+                .await
+                .unwrap();
+
             let write_str = gen_str(min_msg_len, max_msg_len);
 
             let write_str = if let Some(msg_prefix) = &msg_prefix {
@@ -188,9 +196,9 @@ pub async fn start_producer(options: StartProducerOptions) {
             .await
             .unwrap();
 
-            wait_consumer_online(&producer, 5, Duration::from_secs(3))
-                .await
-                .unwrap();
+            if let Some(write_delay) = write_delay {
+                sleep(write_delay).await;
+            }
 
             pre_alloc.write(write_str.as_bytes()).unwrap();
 
@@ -218,13 +226,13 @@ pub async fn start_producer(options: StartProducerOptions) {
                 if i % 1000 == 0 {
                     for join in joins.drain(..) {
                         let result = join.await.unwrap();
-                        assert_eq!(result.status_code, 0);
+                        assert_eq!(result.status_code, expected_status_code);
                     }
                 }
                 if i == msg_num - 1 {
                     for join in joins.drain(..) {
                         let result = join.await.unwrap();
-                        assert_eq!(result.status_code, 0);
+                        assert_eq!(result.status_code, expected_status_code);
                     }
                 }
             }

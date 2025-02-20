@@ -5,6 +5,7 @@ use crate::common::{
 };
 use shm_ringbuf::{
     consumer::{settings::ConsumerSettingsBuilder, RingbufConsumer},
+    error::SUCCESS,
     producer::{settings::ProducerSettingsBuilder, RingbufProducer},
 };
 use tokio::sync::mpsc;
@@ -82,6 +83,8 @@ async fn do_test_ringbuf_spsc(
         max_msg_len,
         notify_threshold,
         msg_prefix: None,
+        write_delay: None,
+        expected_status_code: SUCCESS,
     };
 
     start_producer(options).await;
