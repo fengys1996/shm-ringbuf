@@ -187,6 +187,8 @@ fn clean_expired_subscriptions(
 
         expirations.pop_front();
 
+        debug!("subscription expired, req id: {}", req_id);
+
         if let Some((_, sender)) = subscriptions.remove(&req_id) {
             let _ = sender.send(DataProcessResult {
                 status_code: error::TIMEOUT,

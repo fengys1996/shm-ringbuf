@@ -185,7 +185,7 @@ pub struct DataProcessResult {
 impl DataProcessResult {
     pub fn ok() -> Self {
         Self {
-            status_code: 0,
+            status_code: SUCCESS,
             message: String::new(),
         }
     }
@@ -193,6 +193,7 @@ impl DataProcessResult {
 
 /// 100000 - 200000 are error codes used internally by shm-ringbuf and should
 /// not be used as business codes.
+pub const SUCCESS: u32 = 0;
 pub const CHECKSUM_MISMATCH: u32 = 100000;
 pub const DECODE_ERROR: u32 = 100001;
 pub const TIMEOUT: u32 = 100002;
