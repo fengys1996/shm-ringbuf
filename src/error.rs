@@ -195,3 +195,4 @@ impl DataProcessResult {
 /// not be used as business codes.
 pub const CHECKSUM_MISMATCH: u32 = 100000;
 pub const DECODE_ERROR: u32 = 100001;
+pub const TIMEOUT: u32 = 100002;

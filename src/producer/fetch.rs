@@ -172,8 +172,8 @@ impl ResultFetcher {
     }
 }
 
-fn clean_expired_subscriptions<S>(
-    subscriptions: &DashMap<RequestId, S>,
+fn clean_expired_subscriptions(
+    subscriptions: &DashMap<RequestId, Sender<DataProcessResult>>,
     expirations: &mut VecDeque<(RequestId, Instant)>,
 ) {
     let now = Instant::now();
@@ -186,6 +186,39 @@ fn clean_expired_subscriptions<S>(
         }
 
         expirations.pop_front();
-        subscriptions.remove(&req_id);
+
+        if let Some((_, sender)) = subscriptions.remove(&req_id) {
+            let _ = sender.send(DataProcessResult {
+                status_code: error::TIMEOUT,
+                message: "subscription expired".to_string(),
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+    use std::time::Duration;
+
+    use dashmap::DashMap;
+
+    #[tokio::test]
+    async fn test_clean_expired_subscriptions() {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let subscriptions = DashMap::new();
+        subscriptions.insert(1, tx);
+
+        let mut expirations = VecDeque::new();
+        expirations
+            .push_back((1, std::time::Instant::now() - Duration::from_secs(1)));
+
+        super::clean_expired_subscriptions(&subscriptions, &mut expirations);
+
+        assert!(subscriptions.is_empty());
+        assert!(expirations.is_empty());
+
+        let ret = rx.await.unwrap();
+        assert_eq!(ret.status_code, super::error::TIMEOUT);
     }
 }
