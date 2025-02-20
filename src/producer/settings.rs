@@ -5,7 +5,8 @@ const DEFAULT_GRPC_SOCK_PATH: &str = "/tmp/grpc.sock";
 const DEFAULT_FDPASS_SOCK_PATH: &str = "/tmp/fdpass.sock";
 const DEFAULT_RINGBUF_LEN: usize = 1024 * 1024;
 const DEFAULT_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
-const DEFAULT_RESULT_FETCH_RETRY_INTERVAL: Duration = Duration::from_secs(3);
+const DEFAULT_RECONNECT_INTERVAL: Duration = Duration::from_secs(3);
+const DEFAULT_EXPIRED_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Clone)]
 pub struct ProducerSettings {
@@ -14,7 +15,8 @@ pub struct ProducerSettings {
     pub(super) ringbuf_len: usize,
     pub(super) heartbeat_interval: Duration,
     pub(super) enable_result_fetch: bool,
-    pub(super) result_fetch_retry_interval: Duration,
+    pub(super) reconnect_interval: Duration,
+    pub(super) expired_check_interval: Duration,
     pub(super) enable_checksum: bool,
     #[cfg(not(any(
         target_os = "linux",
@@ -31,7 +33,8 @@ pub struct ProducerSettingsBuilder {
     ringbuf_len: Option<usize>,
     heartbeat_interval: Option<Duration>,
     enable_result_fetch: Option<bool>,
-    result_fetch_retry_interval: Option<Duration>,
+    reconnect_interval: Option<Duration>,
+    expired_check_interval: Option<Duration>,
     enable_checksum: Option<bool>,
     #[cfg(not(any(
         target_os = "linux",
@@ -79,8 +82,14 @@ impl ProducerSettingsBuilder {
     }
 
     /// Set the interval for retrying to fetch the result.
-    pub fn result_fetch_retry_interval(mut self, interval: Duration) -> Self {
-        self.result_fetch_retry_interval = Some(interval);
+    pub fn reconnect_interval(mut self, interval: Duration) -> Self {
+        self.reconnect_interval = Some(interval);
+        self
+    }
+
+    /// Set the interval for checking the expired result fetch subscriptions.
+    pub fn expired_check_interval(mut self, interval: Duration) -> Self {
+        self.expired_check_interval = Some(interval);
         self
     }
 
@@ -118,9 +127,13 @@ impl ProducerSettingsBuilder {
 
         let enable_result_fetch = self.enable_result_fetch.unwrap_or(true);
 
-        let result_fetch_retry_interval = self
-            .result_fetch_retry_interval
-            .unwrap_or(DEFAULT_RESULT_FETCH_RETRY_INTERVAL);
+        let reconnect_interval = self
+            .reconnect_interval
+            .unwrap_or(DEFAULT_RECONNECT_INTERVAL);
+
+        let expired_check_interval = self
+            .expired_check_interval
+            .unwrap_or(DEFAULT_EXPIRED_CHECK_INTERVAL);
 
         let enable_checksum = self.enable_checksum.unwrap_or(false);
 
@@ -140,7 +153,8 @@ impl ProducerSettingsBuilder {
             heartbeat_interval,
             enable_checksum,
             enable_result_fetch,
-            result_fetch_retry_interval,
+            reconnect_interval,
+            expired_check_interval,
             #[cfg(not(any(
                 target_os = "linux",
                 target_os = "android",

@@ -14,6 +14,7 @@ use tokio::sync::oneshot::Receiver;
 use tokio::sync::oneshot::Sender;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
+use tokio_util::sync::CancellationToken;
 use tonic::Streaming;
 use tracing::debug;
 
@@ -34,7 +35,6 @@ pub struct ResultFetcher {
 
 struct Inner {
     grpc_client: GrpcClient,
-    retry_interval: Duration,
     normal: AtomicBool,
     subscriptions: DashMap<RequestId, Sender<DataProcessResult>>,
     expirations: RwLock<VecDeque<(RequestId, Instant)>>,
@@ -43,7 +43,10 @@ struct Inner {
 impl ResultFetcher {
     pub async fn new(
         grpc_client: GrpcClient,
-        retry_interval: Duration,
+        reconnect_interval: Duration,
+        // The interval for checking the expired result fetch subscriptions.
+        expired_check_interval: Duration,
+        cancel: CancellationToken,
     ) -> ResultFetcher {
         let normal = AtomicBool::new(false);
         let subscriptions = DashMap::new();
@@ -51,7 +54,6 @@ impl ResultFetcher {
 
         let inner = Inner {
             grpc_client,
-            retry_interval,
             normal,
             subscriptions,
             expirations,
@@ -62,9 +64,14 @@ impl ResultFetcher {
             inner: inner.clone(),
         };
 
+        // Start a task to check the expired result fetch subscriptions periodically.
         let inner_c = inner.clone();
         tokio::spawn(async move {
             loop {
+                if cancel.is_cancelled() {
+                    break;
+                }
+                sleep(expired_check_interval).await;
                 {
                     let mut expirations = inner_c.expirations.write().unwrap();
                     clean_expired_subscriptions(
@@ -72,7 +79,6 @@ impl ResultFetcher {
                         &mut expirations,
                     );
                 }
-                sleep(Duration::from_secs(1)).await;
             }
         });
 
@@ -85,9 +91,9 @@ impl ResultFetcher {
             inner.normal.store(true, Ordering::Relaxed);
         }
 
+        // Start a task to fetch the result stream.
         tokio::spawn(async move {
             let mut may_stream = may_stream.ok();
-
             loop {
                 if let Some(stream) = may_stream.take() {
                     if let Err(e) = fetcher.handle_stream(stream).await {
@@ -98,7 +104,7 @@ impl ResultFetcher {
                 };
 
                 fetcher.inner.normal.store(false, Ordering::Relaxed);
-                sleep(fetcher.inner.retry_interval).await;
+                sleep(reconnect_interval).await;
             }
         });
 
