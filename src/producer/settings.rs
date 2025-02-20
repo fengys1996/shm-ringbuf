@@ -7,6 +7,7 @@ const DEFAULT_RINGBUF_LEN: usize = 1024 * 1024;
 const DEFAULT_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const DEFAULT_RECONNECT_INTERVAL: Duration = Duration::from_secs(3);
 const DEFAULT_EXPIRED_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+const DEFAULT_SUBSCRIPTION_TTL: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone)]
 pub struct ProducerSettings {
@@ -17,6 +18,7 @@ pub struct ProducerSettings {
     pub(super) enable_result_fetch: bool,
     pub(super) reconnect_interval: Duration,
     pub(super) expired_check_interval: Duration,
+    pub(super) subscription_ttl: Duration,
     pub(super) enable_checksum: bool,
     #[cfg(not(any(
         target_os = "linux",
@@ -35,6 +37,7 @@ pub struct ProducerSettingsBuilder {
     enable_result_fetch: Option<bool>,
     reconnect_interval: Option<Duration>,
     expired_check_interval: Option<Duration>,
+    subscription_ttl: Option<Duration>,
     enable_checksum: Option<bool>,
     #[cfg(not(any(
         target_os = "linux",
@@ -93,6 +96,12 @@ impl ProducerSettingsBuilder {
         self
     }
 
+    /// Set the ttl(time to live) for the subscription.
+    pub fn subscription_ttl(mut self, timeout: Duration) -> Self {
+        self.subscription_ttl = Some(timeout);
+        self
+    }
+
     /// Enable verify data consistency by checksum.
     pub fn enable_checksum(mut self, enable: bool) -> Self {
         self.enable_checksum = Some(enable);
@@ -135,6 +144,9 @@ impl ProducerSettingsBuilder {
             .expired_check_interval
             .unwrap_or(DEFAULT_EXPIRED_CHECK_INTERVAL);
 
+        let subscription_ttl =
+            self.subscription_ttl.unwrap_or(DEFAULT_SUBSCRIPTION_TTL);
+
         let enable_checksum = self.enable_checksum.unwrap_or(false);
 
         #[cfg(not(any(
@@ -151,10 +163,11 @@ impl ProducerSettingsBuilder {
             fdpass_sock_path,
             ringbuf_len,
             heartbeat_interval,
-            enable_checksum,
             enable_result_fetch,
             reconnect_interval,
             expired_check_interval,
+            subscription_ttl,
+            enable_checksum,
             #[cfg(not(any(
                 target_os = "linux",
                 target_os = "android",

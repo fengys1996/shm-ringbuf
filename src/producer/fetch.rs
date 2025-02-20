@@ -37,6 +37,7 @@ struct Inner {
     grpc_client: GrpcClient,
     normal: AtomicBool,
     subscriptions: DashMap<RequestId, Sender<DataProcessResult>>,
+    subscription_ttl: Duration,
     expirations: RwLock<VecDeque<(RequestId, Instant)>>,
 }
 
@@ -46,6 +47,7 @@ impl ResultFetcher {
         reconnect_interval: Duration,
         // The interval for checking the expired result fetch subscriptions.
         expired_check_interval: Duration,
+        subscription_ttl: Duration,
         cancel: CancellationToken,
     ) -> ResultFetcher {
         let normal = AtomicBool::new(false);
@@ -56,6 +58,7 @@ impl ResultFetcher {
             grpc_client,
             normal,
             subscriptions,
+            subscription_ttl,
             expirations,
         };
         let inner = Arc::new(inner);
@@ -121,7 +124,7 @@ impl ResultFetcher {
 
         let (tx, rx) = channel();
         self.inner.subscriptions.insert(request_id, tx);
-        let expired_at = Instant::now() + Duration::from_secs(5);
+        let expired_at = Instant::now() + self.inner.subscription_ttl;
         self.inner
             .expirations
             .write()

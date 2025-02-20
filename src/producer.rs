@@ -51,6 +51,7 @@ impl RingbufProducer {
             enable_result_fetch,
             reconnect_interval,
             expired_check_interval,
+            subscription_ttl,
             enable_checksum,
             #[cfg(not(any(
                 target_os = "linux",
@@ -106,6 +107,7 @@ impl RingbufProducer {
                     grpc_client.clone(),
                     reconnect_interval,
                     expired_check_interval,
+                    subscription_ttl,
                     cancel_c,
                 )
                 .await,
