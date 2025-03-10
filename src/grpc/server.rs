@@ -119,7 +119,13 @@ impl ShmControl for ShmCtlHandler {
     ) -> StdResult<Response<proto::PingResponse>, Status> {
         let PingRequest { producer_id } = request.into_inner();
 
-        if self.session_manager.get(&producer_id).is_none() {
+        let missfd = self
+            .session_manager
+            .get(&producer_id)
+            .map(|s| s.ringbuf().is_none())
+            .unwrap_or(true);
+
+        if missfd {
             let resp = proto::PingResponse {
                 status_code: StatusCode::MissingFD as u32,
                 status_message: "ringbuf was not found".to_string(),
