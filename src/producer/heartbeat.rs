@@ -40,7 +40,7 @@ impl Heartbeat {
 
     pub async fn ping(&self) {
         let Err(e) = self.client.ping().await else {
-            self.set_online(true);
+            self.set_online(false);
             return;
         };
 
