@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  RUST_TOOLCHAIN: 1.83.0
+  RUST_TOOLCHAIN: 1.92
 
 jobs:
   typos:
