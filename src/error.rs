@@ -84,7 +84,7 @@ pub enum Error {
 
     #[snafu(display("Tonic error"))]
     Tonic {
-        source: tonic::Status,
+        source: Box<tonic::Status>,
         #[snafu(implicit)]
         location: Location,
     },

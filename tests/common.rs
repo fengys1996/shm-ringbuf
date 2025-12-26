@@ -1,7 +1,7 @@
 use shm_ringbuf::{
     consumer::process::{DataProcess, ResultSender},
     error::DataProcessResult,
-    producer::{prealloc::PreAlloc, RingbufProducer},
+    producer::{RingbufProducer, prealloc::PreAlloc},
 };
 use std::fmt::{Display, Formatter};
 use std::{sync::Arc, time::Duration};

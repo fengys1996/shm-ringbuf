@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use shm_ringbuf::error;
+use shm_ringbuf::producer::RingbufProducer;
 use shm_ringbuf::producer::prealloc::PreAlloc;
 use shm_ringbuf::producer::settings::ProducerSettingsBuilder;
-use shm_ringbuf::producer::RingbufProducer;
 use tokio::time::sleep;
 use tracing::info;
 

@@ -2,7 +2,7 @@
 name = "shm-ringbuf"
 version = "0.1.0"
 authors = ["fys <fengys1996@gmail.com>"]
-edition = "2021"
+edition = "2024"
 keywords = ["ringbuf", "shared-memory", "ipc"]
 license = "Apache-2.0"
 description = "A ringbuf based on shared memory"

@@ -1,9 +1,9 @@
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
+use shm_ringbuf::consumer::RingbufConsumer;
 use shm_ringbuf::consumer::process::{DataProcess, ResultSender};
 use shm_ringbuf::consumer::settings::ConsumerSettingsBuilder;
-use shm_ringbuf::consumer::RingbufConsumer;
 use shm_ringbuf::error::DataProcessResult;
 use tracing::info;
 

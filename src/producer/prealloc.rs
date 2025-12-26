@@ -9,8 +9,8 @@ use tokio::sync::oneshot::Receiver;
 use crate::error;
 use crate::error::DataProcessResult;
 use crate::error::Result;
-use crate::ringbuf::data_block::DataBlock;
 use crate::ringbuf::DropGuard;
+use crate::ringbuf::data_block::DataBlock;
 
 /// The pre-allocated data block.
 pub struct PreAlloc {

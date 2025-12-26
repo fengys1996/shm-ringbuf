@@ -94,9 +94,9 @@ pub fn create_fd(settings: Settings) -> Result<fs::File> {
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 fn disable_shrink_or_grow(fd: i32) -> Result<()> {
-    use nix::fcntl::fcntl;
     use nix::fcntl::FcntlArg;
     use nix::fcntl::SealFlag;
+    use nix::fcntl::fcntl;
     let seal_flag = SealFlag::F_SEAL_GROW | SealFlag::F_SEAL_SHRINK;
     let fcntl_arg = FcntlArg::F_ADD_SEALS(seal_flag);
     fcntl(fd, fcntl_arg).context(error::FcntlSnafu)?;

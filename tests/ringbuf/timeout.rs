@@ -1,13 +1,13 @@
 use std::{sync::Arc, time::Duration};
 
 use shm_ringbuf::{
-    consumer::{settings::ConsumerSettingsBuilder, RingbufConsumer},
+    consumer::{RingbufConsumer, settings::ConsumerSettingsBuilder},
     error::TIMEOUT,
-    producer::{settings::ProducerSettingsBuilder, RingbufProducer},
+    producer::{RingbufProducer, settings::ProducerSettingsBuilder},
 };
 use tokio::sync::mpsc;
 
-use crate::common::{start_producer, MsgForward, StartProducerOptions};
+use crate::common::{MsgForward, StartProducerOptions, start_producer};
 
 #[tokio::test]
 async fn test_subscription_ttl() {

@@ -6,11 +6,11 @@ mod heartbeat;
 
 use std::fs::File;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::sync::RwLock;
 
 use fetch::ResultFetcher;
 use settings::ProducerSettings;
@@ -22,8 +22,8 @@ use self::prealloc::PreAlloc;
 use crate::error::Result;
 use crate::fd_pass::send_fd;
 use crate::grpc::client::GrpcClient;
-use crate::memfd::create_fd;
 use crate::memfd::Settings;
+use crate::memfd::create_fd;
 use crate::ringbuf::Ringbuf;
 
 /// The producer of the ringbuf based on shared memory.
@@ -134,11 +134,11 @@ impl RingbufProducer {
     /// # Errors:
     ///
     /// - If the requested space exceeds the capacity of ringbuf, an
-    ///     [`crate::error::Error::ExceedCapacity`] error will be returned.
+    ///   [`crate::error::Error::ExceedCapacity`] error will be returned.
     ///
     /// - If the requested space exceeds the remaining space of ringbuf, and
-    ///     not exceeds the capacity, an [`crate::error::Error::NotEnoughSpace`]
-    ///     error will be returned.
+    ///   not exceeds the capacity, an [`crate::error::Error::NotEnoughSpace`]
+    ///   error will be returned.
     pub fn reserve(&self, bytes: usize) -> Result<PreAlloc> {
         let req_id = self.gen_req_id();
         let data_block =

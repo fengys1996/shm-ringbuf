@@ -1,10 +1,10 @@
 use std::ptr;
+use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
-use snafu::ensure;
 use snafu::ResultExt;
+use snafu::ensure;
 
 use crate::convert_num;
 use crate::error;
@@ -119,7 +119,7 @@ impl<T> DataBlock<T> {
         // Unwrap safety: checked above.
         let data_len = len.checked_sub(header_len_u32).unwrap();
 
-        let header = Header::fow_raw(start_ptr);
+        let header = unsafe { Header::from_raw(start_ptr) };
         header.set_capacity(data_len);
         header.set_written(0);
         header.set_busy(true);
@@ -142,7 +142,7 @@ impl<T> DataBlock<T> {
     ///
     /// The caller must ensurea that `start_ptr` identifies a valid [`DataBlock`].
     pub(crate) unsafe fn from_raw(start_ptr: *mut u8, object: Arc<T>) -> Self {
-        let header = Header::fow_raw(start_ptr);
+        let header = unsafe { Header::from_raw(start_ptr) };
 
         let data_ptr = unsafe { start_ptr.add(HEADER_LEN) };
 
@@ -206,12 +206,12 @@ impl Header {
     /// # Safety
     ///
     /// The `header_ptr` must be a valid pointer to the [`Header`].
-    unsafe fn fow_raw(header_ptr: *mut u8) -> Self {
+    unsafe fn from_raw(header_ptr: *mut u8) -> Self {
         let capacity_ptr = header_ptr as *mut u32;
-        let len_ptr = capacity_ptr.add(1);
-        let busy_ptr = len_ptr.add(1);
-        let req_id_ptr = busy_ptr.add(1);
-        let crc32_ptr = req_id_ptr.add(1);
+        let len_ptr = unsafe { capacity_ptr.add(1) };
+        let busy_ptr = unsafe { len_ptr.add(1) };
+        let req_id_ptr = unsafe { busy_ptr.add(1) };
+        let crc32_ptr = unsafe { req_id_ptr.add(1) };
 
         Self {
             capacity_ptr,
@@ -300,14 +300,14 @@ mod tests {
     use std::sync::Arc;
 
     use super::DataBlock;
-    use super::Header;
     use super::HEADER_LEN;
+    use super::Header;
     use crate::error;
 
     #[test]
     fn test_header() {
         let vec = [0u8; 16];
-        let header = unsafe { Header::fow_raw(vec.as_ptr() as *mut u8) };
+        let header = unsafe { Header::from_raw(vec.as_ptr() as *mut u8) };
 
         header.set_capacity(1024);
         header.set_written(512);

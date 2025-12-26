@@ -10,8 +10,8 @@ criterion::criterion_main!(benches);
 #[cfg(feature = "benchmark")]
 pub mod benches {
     use criterion::Criterion;
-    use shm_ringbuf::error;
     use shm_ringbuf::Ringbuf;
+    use shm_ringbuf::error;
 
     fn bench_ringbuf_write() {
         write_ringbuf_until_full();

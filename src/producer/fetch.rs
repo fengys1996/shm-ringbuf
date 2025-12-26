@@ -1,17 +1,17 @@
 use std::collections::VecDeque;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use std::time::Instant;
 
 use dashmap::DashMap;
-use snafu::ensure;
 use snafu::ResultExt;
-use tokio::sync::oneshot::channel;
+use snafu::ensure;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::oneshot::Sender;
+use tokio::sync::oneshot::channel;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use tokio_util::sync::CancellationToken;
@@ -151,7 +151,8 @@ impl ResultFetcher {
         mut result_stream: Streaming<ResultSet>,
     ) -> Result<()> {
         while let Some(may_result) = result_stream.next().await {
-            let result = may_result.context(error::TonicSnafu)?;
+            let result =
+                may_result.map_err(Box::new).context(error::TonicSnafu)?;
             self.handle_result(result).await;
         }
 

@@ -15,14 +15,6 @@ service ShmControl {
   rpc FetchResult(FetchResultRequest) returns (stream ResultSet);
 }
 
-message HandShakeResponse {
-  /// The status code of the handshake.
-  uint32 status_code = 1;
-  
-  /// The status message of the handshake.
-  string status_message = 2;
-}
-
 message PingRequest {
   /// The producer_id uniquely identifies the client.
   string producer_id = 1;

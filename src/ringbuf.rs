@@ -4,9 +4,9 @@ use std::ffi::c_void;
 use std::fs::File;
 use std::num::NonZeroUsize;
 use std::ptr::NonNull;
+use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use data_block::DataBlock;
 use data_block::HEADER_LEN;
@@ -15,9 +15,9 @@ use nix::sys::mman;
 use nix::sys::mman::MapFlags;
 use nix::sys::mman::ProtFlags;
 use once_cell::sync::OnceCell;
-use snafu::ensure;
 use snafu::OptionExt;
 use snafu::ResultExt;
+use snafu::ensure;
 use tracing::error;
 
 use crate::convert_num;
@@ -231,7 +231,7 @@ impl Ringbuf {
         req_id: u32,
     ) -> Result<DataBlock<DropGuard>> {
         // 1. calculate the actual allocated bytes.
-        let bytes = (bytes + 3) / 4 * 4;
+        let bytes = bytes.div_ceil(4) * 4;
         let actual_alloc_bytes = (bytes + HEADER_LEN) as u32;
 
         // 2. check if the actual allocate bytes exceeds the capacity.

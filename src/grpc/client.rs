@@ -3,18 +3,18 @@ use std::path::PathBuf;
 use hyper_util::rt::TokioIo;
 use snafu::ResultExt;
 use tokio::net::UnixStream;
+use tonic::Request;
+use tonic::Streaming;
 use tonic::transport::Channel;
 use tonic::transport::Endpoint;
 use tonic::transport::Uri;
-use tonic::Request;
-use tonic::Streaming;
 use tower::service_fn;
 
-use super::proto::shm_control_client::ShmControlClient;
 use super::proto::FetchResultRequest;
 use super::proto::NotifyRequest;
 use super::proto::PingRequest;
 use super::proto::ResultSet;
+use super::proto::shm_control_client::ShmControlClient;
 use super::status_code::StatusCode;
 use crate::error;
 use crate::error::Result;
@@ -66,6 +66,7 @@ impl GrpcClient {
         let _resp = ShmControlClient::new(self.channel.clone())
             .notify(Request::new(req))
             .await
+            .map_err(Box::new)
             .context(error::TonicSnafu {})?
             .into_inner();
 
@@ -81,6 +82,7 @@ impl GrpcClient {
         let resp = ShmControlClient::new(self.channel.clone())
             .ping(Request::new(ping_req))
             .await
+            .map_err(Box::new)
             .context(error::TonicSnafu {})?
             .into_inner();
 
@@ -95,6 +97,7 @@ impl GrpcClient {
         let result_stream = ShmControlClient::new(self.channel.clone())
             .fetch_result(Request::new(req))
             .await
+            .map_err(Box::new)
             .context(error::TonicSnafu {})?
             .into_inner();
 

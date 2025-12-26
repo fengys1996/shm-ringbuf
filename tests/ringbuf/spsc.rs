@@ -1,12 +1,12 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::common::{
-    msg_num, start_producer, MsgForward, StartProducerOptions,
+    MsgForward, StartProducerOptions, msg_num, start_producer,
 };
 use shm_ringbuf::{
-    consumer::{settings::ConsumerSettingsBuilder, RingbufConsumer},
+    consumer::{RingbufConsumer, settings::ConsumerSettingsBuilder},
     error::SUCCESS,
-    producer::{settings::ProducerSettingsBuilder, RingbufProducer},
+    producer::{RingbufProducer, settings::ProducerSettingsBuilder},
 };
 use tokio::sync::mpsc;
 

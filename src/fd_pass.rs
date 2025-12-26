@@ -8,8 +8,8 @@ use std::pin::pin;
 use std::time::Duration;
 
 use passfd::tokio::FdPassingExt;
-use snafu::location;
 use snafu::ResultExt;
+use snafu::location;
 use tokio::fs;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
@@ -298,8 +298,8 @@ mod tests {
     use super::send_fd;
     use crate::consumer::session_manager::SessionManager;
     use crate::fd_pass::{
-        read_err, read_status, write_err, write_ok, FdRecvServer,
-        RINGBUF_NOT_READY, RINGBUF_READY,
+        FdRecvServer, RINGBUF_NOT_READY, RINGBUF_READY, read_err, read_status,
+        write_err, write_ok,
     };
     use crate::ringbuf::min_ringbuf_len;
 

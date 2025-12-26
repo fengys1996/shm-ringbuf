@@ -3,9 +3,9 @@ pub mod settings;
 
 pub(crate) mod session_manager;
 
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Duration;
 
 use process::DataProcess;
@@ -20,7 +20,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::error::CHECKSUM_MISMATCH;
-use crate::error::{DataProcessResult, DECODE_ERROR};
+use crate::error::{DECODE_ERROR, DataProcessResult};
 use crate::fd_pass::FdRecvServer;
 use crate::grpc::proto::shm_control_server::ShmControlServer;
 use crate::grpc::server::ShmCtlHandler;
