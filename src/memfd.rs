@@ -1,6 +1,4 @@
 use std::fs;
-use std::os::fd::FromRawFd;
-use std::os::fd::IntoRawFd;
 
 use snafu::ResultExt;
 
@@ -39,18 +37,16 @@ pub fn create_fd(settings: Settings) -> Result<fs::File> {
 
         let c_name = CString::new(name.clone()).context(error::NulZeroSnafu)?;
 
-        let flags = memfd::MemFdCreateFlag::MFD_CLOEXEC
-            | memfd::MemFdCreateFlag::MFD_ALLOW_SEALING;
+        let flags =
+            memfd::MFdFlags::MFD_CLOEXEC | memfd::MFdFlags::MFD_ALLOW_SEALING;
 
-        let owned_fd = memfd::memfd_create(&c_name, flags)
+        let owned_fd = memfd::memfd_create(c_name.as_c_str(), flags)
             .context(error::MemFdSnafu { fd_name: name })?;
 
-        let raw_fd = owned_fd.into_raw_fd();
-
-        let file = unsafe { fs::File::from_raw_fd(raw_fd) };
+        let file = fs::File::from(owned_fd);
         file.set_len(size).context(error::IoSnafu)?;
 
-        disable_shrink_or_grow(raw_fd)?;
+        disable_shrink_or_grow(&file)?;
 
         Ok(file)
     }
@@ -70,7 +66,7 @@ pub fn create_fd(settings: Settings) -> Result<fs::File> {
             }
         };
 
-        let owned_fd = fs::OpenOptions::new()
+        let file = fs::OpenOptions::new()
             .write(true)
             .read(true)
             .create(true)
@@ -83,9 +79,6 @@ pub fn create_fd(settings: Settings) -> Result<fs::File> {
         // But we are only developing on macOS and will not use macOS as a production environment. So we will comment out the following.
         fs::remove_file(path).context(error::IoSnafu)?;
 
-        let raw_fd = owned_fd.into_raw_fd();
-
-        let file = unsafe { fs::File::from_raw_fd(raw_fd) };
         file.set_len(size).context(error::IoSnafu)?;
 
         Ok(file)
@@ -93,13 +86,13 @@ pub fn create_fd(settings: Settings) -> Result<fs::File> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-fn disable_shrink_or_grow(fd: i32) -> Result<()> {
+fn disable_shrink_or_grow(file: &fs::File) -> Result<()> {
     use nix::fcntl::FcntlArg;
     use nix::fcntl::SealFlag;
     use nix::fcntl::fcntl;
     let seal_flag = SealFlag::F_SEAL_GROW | SealFlag::F_SEAL_SHRINK;
     let fcntl_arg = FcntlArg::F_ADD_SEALS(seal_flag);
-    fcntl(fd, fcntl_arg).context(error::FcntlSnafu)?;
+    fcntl(file, fcntl_arg).context(error::FcntlSnafu)?;
     Ok(())
 }
 
