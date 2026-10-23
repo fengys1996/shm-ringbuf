@@ -5,6 +5,7 @@ use std::fs::File;
 use std::num::NonZeroUsize;
 use std::ptr::NonNull;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
 
@@ -14,7 +15,6 @@ use nix::libc::_SC_PAGESIZE;
 use nix::sys::mman;
 use nix::sys::mman::MapFlags;
 use nix::sys::mman::ProtFlags;
-use once_cell::sync::OnceCell;
 use snafu::OptionExt;
 use snafu::ResultExt;
 use snafu::ensure;
@@ -70,13 +70,13 @@ pub(crate) const METADATA_LEN: usize = 4 * 4;
 
 // Unit is byte.
 pub fn page_align_metadata_len() -> u64 {
-    static LEN: OnceCell<u64> = OnceCell::new();
+    static LEN: OnceLock<u64> = OnceLock::new();
     *LEN.get_or_init(|| page_align_size(METADATA_LEN as u64))
 }
 
 // Unit is byte.
 pub fn min_ringbuf_len() -> u64 {
-    static LEN: OnceCell<u64> = OnceCell::new();
+    static LEN: OnceLock<u64> = OnceLock::new();
     *LEN.get_or_init(|| {
         page_align_size(HEADER_LEN as u64 + 1024) + page_align_metadata_len()
     })
