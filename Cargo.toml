@@ -31,6 +31,8 @@ snafu = { version = "0.8" }
 tokio = { version = "1.0", features = ["fs", "rt-multi-thread"] }
 tokio-stream = { version = "0.1", default-features = false, features = ["net"] }
 tokio-util = { version = "0.7" }
+# Pin to the version locked by greptimedb-edge, which excludes >=0.14.5
+# due to a connection timeout panic (grpc/grpc-rust#2522).
 tonic = { version = "=0.14.2" }
 tonic-prost = { version = "=0.14.2" }
 tower = { version = "0.5", features = ["util"] }
