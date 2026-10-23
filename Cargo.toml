@@ -25,13 +25,14 @@ once_cell = { version = "1.20" }
 passfd = { git = "https://github.com/polachok/passfd.git", rev = "d55881752c16aced1a49a75f9c428d38d3767213", features = [
   "async",
 ] }
-prost = { version = "0.13" }
+prost = { version = "0.14" }
 uuid = { version = "1.11", features = ["v4"] }
 snafu = { version = "0.8" }
 tokio = { version = "1.0", features = ["fs", "rt-multi-thread"] }
 tokio-stream = { version = "0.1", default-features = false, features = ["net"] }
 tokio-util = { version = "0.7" }
-tonic = { version = "0.12" }
+tonic = { version = "=0.14.2" }
+tonic-prost = { version = "=0.14.2" }
 tower = { version = "0.5", features = ["util"] }
 tracing = { version = "0.1" }
 
@@ -42,7 +43,7 @@ tempfile = { version = "3.14" }
 tracing-subscriber = { version = "0.3" }
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-prost-build = "=0.14.2"
 
 [[bench]]
 name = "ringbuf"
