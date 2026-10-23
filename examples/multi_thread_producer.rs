@@ -55,7 +55,7 @@ async fn write_msg(producer: Arc<RingbufProducer>, range: Range<usize>) {
 
         pre_alloc.write(write_str.as_bytes()).unwrap();
 
-        pre_alloc.commit();
+        drop(pre_alloc.commit());
 
         if i % 100 == 0 {
             sleep(Duration::from_millis(10)).await;

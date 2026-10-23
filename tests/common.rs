@@ -202,7 +202,7 @@ pub async fn start_producer(options: StartProducerOptions) {
 
             pre_alloc.write(write_str.as_bytes()).unwrap();
 
-            pre_alloc.commit();
+            let join = pre_alloc.commit();
 
             if let Some(threshold) = notify_threshold {
                 // If we set a longer process interval, the last batch of messages
@@ -218,8 +218,6 @@ pub async fn start_producer(options: StartProducerOptions) {
             }
 
             if let Some(joins) = &mut joins {
-                let join = pre_alloc.wait_result();
-
                 joins.push(join);
 
                 // Wait the result every 1000 messages.

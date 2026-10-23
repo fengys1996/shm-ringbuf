@@ -35,20 +35,17 @@ impl PreAlloc {
         self.data_block.write(data)
     }
 
-    /// Commit the written data.
+    /// Commit the written data, consuming the allocation.
     ///
-    /// After commit, the consumer can see the written data.
-    pub fn commit(&self) {
+    /// Returns a [`Handle`] to await the processing result; drop it if not needed.
+    pub fn commit(self) -> Handle {
         if self.enable_checksum {
             let checksum = crc32fast::hash(self.slice());
             self.data_block.set_checksum(checksum);
         }
 
         self.data_block.commit();
-    }
 
-    /// Return a [`Handle`] to wait for the result of data processing.
-    pub fn wait_result(self) -> Handle {
         Handle { rx: self.rx }
     }
 }

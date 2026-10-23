@@ -36,9 +36,7 @@ async fn main() {
 
         pre_alloc.write(write_str.as_bytes()).unwrap();
 
-        pre_alloc.commit();
-
-        let join = pre_alloc.wait_result();
+        let join = pre_alloc.commit();
 
         joins.push(join);
 
