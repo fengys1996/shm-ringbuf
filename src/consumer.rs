@@ -25,6 +25,7 @@ use crate::fd_pass::FdRecvServer;
 use crate::grpc::proto::shm_control_server::ShmControlServer;
 use crate::grpc::server::ShmCtlHandler;
 use crate::grpc::server::ShmCtlServer;
+use crate::ringbuf::data_block::BlockState;
 
 /// The consumer of the ringbuf based on shared memory.
 pub struct RingbufConsumer {
@@ -203,8 +204,15 @@ where
     let enable_checksum = ringbuf.checksum_flag();
 
     while let Some(data_block) = ringbuf.peek() {
-        if data_block.is_busy() {
-            break;
+        match data_block.state() {
+            BlockState::Writing => break,
+            BlockState::Discarded => {
+                let total_len = data_block.total_len();
+                // The producer has relinquished this block without publishing data.
+                unsafe { ringbuf.advance_consume_offset(total_len) };
+                continue;
+            }
+            BlockState::Committed => {}
         }
 
         let data_slice = data_block.slice().unwrap();
@@ -248,5 +256,59 @@ where
                 result_sender.push_result(result).await;
             }
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::Infallible;
+    use std::sync::Mutex;
+
+    use super::*;
+    use crate::ringbuf::Ringbuf;
+
+    struct Collector(Mutex<Vec<Vec<u8>>>);
+
+    impl DataProcess for Collector {
+        type Message = Vec<u8>;
+        type Error = Infallible;
+
+        fn decode(&self, data: &[u8]) -> Result<Vec<u8>, Infallible> {
+            self.0.lock().unwrap().push(data.to_vec());
+            Ok(data.to_vec())
+        }
+
+        async fn process(&self, _: Vec<u8>, _: ResultSender) {}
+    }
+
+    #[tokio::test]
+    async fn test_discarded_blocks_are_skipped() {
+        let file = tempfile::tempfile().unwrap();
+        let mut ringbuf = Ringbuf::new(&file).unwrap();
+        ringbuf.set_checksum_flag(true);
+        let mut abandoned = ringbuf.reserve(64, 1).unwrap();
+        abandoned.write(b"partial").unwrap();
+        abandoned.set_checksum(crc32fast::hash(b"partial"));
+        let mut ready = ringbuf.reserve(64, 2).unwrap();
+        ready.write(b"complete").unwrap();
+        ready.set_checksum(crc32fast::hash(b"complete"));
+        ready.commit();
+
+        let ringbuf = Arc::new(ringbuf);
+        let manager = SessionManager::new(1, Duration::from_secs(60));
+        let client_id = "discard-test".to_string();
+        manager.set_ringbuf(&client_id, ringbuf.clone());
+        let session = manager.get(&client_id).unwrap();
+        let collector = Collector(Mutex::new(Vec::new()));
+
+        // A writing block must still stop consumption of later committed data.
+        process_session(&session, &collector).await;
+        assert!(collector.0.lock().unwrap().is_empty());
+        assert_eq!(ringbuf.consume_offset(), 0);
+
+        abandoned.discard();
+        process_session(&session, &collector).await;
+        assert_eq!(*collector.0.lock().unwrap(), vec![b"complete".to_vec()]);
+        assert!(ringbuf.peek().is_none());
     }
 }

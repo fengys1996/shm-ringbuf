@@ -29,6 +29,18 @@ pub struct DataBlock<T> {
     _object: Arc<T>,
 }
 
+/// State of a shared data block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum BlockState {
+    /// Ready for the consumer to read.
+    Committed = 0,
+    /// Still being written; the consumer must wait.
+    Writing = 1,
+    /// Discarded; the consumer skips and reclaims the block.
+    Discarded = 2,
+}
+
 // Unit is byte.
 pub const HEADER_LEN: usize = 4 * 8;
 
@@ -74,11 +86,16 @@ impl<T> DataBlock<T> {
     /// Commit the DataBlock. The consumer can read data after the [`DataBlock`]
     /// is committed.
     pub fn commit(&self) {
-        self.header.set_busy(false);
+        self.header.set_state(BlockState::Committed);
     }
 
-    pub fn is_busy(&self) -> bool {
-        self.header.busy()
+    pub fn state(&self) -> BlockState {
+        self.header.state()
+    }
+
+    /// Release an unpublished block for the consumer to skip and reclaim.
+    pub(crate) fn discard(&self) {
+        self.header.set_state(BlockState::Discarded);
     }
 
     pub fn req_id(&self) -> u32 {
@@ -122,7 +139,7 @@ impl<T> DataBlock<T> {
         let header = unsafe { Header::from_raw(start_ptr) };
         header.set_capacity(data_len);
         header.set_written(0);
-        header.set_busy(true);
+        header.set_state(BlockState::Writing);
         header.set_req_id(req_id);
 
         let data_ptr = unsafe { start_ptr.add(HEADER_LEN) };
@@ -171,11 +188,11 @@ impl<T> DataBlock<T> {
 /// ## The underlying structure
 ///
 /// ```text
-/// header.capacity_ptr header.len_ptr      header.busy_ptr     header.req_id_ptr   header.crc32_ptr
+/// header.capacity_ptr header.len_ptr      header.state_ptr    header.req_id_ptr   header.crc32_ptr
 /// |                   |                   |                   |                   |
 /// v                   v                   v                   v                   v
 /// +-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
-/// | capacity          | len               | busy              | request ID        | crc32 checksum    | reserved          |
+/// | capacity          | len               | state             | request ID        | crc32 checksum    | reserved          |
 /// +-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
 /// | 4 bytes           | 4 bytes           | 4 bytes           | 4 bytes           | 4 bytes           | 12 bytes          |
 /// +-------------------+-------------------+-------------------+-------------------+-------------------+-------------------+
@@ -186,12 +203,8 @@ struct Header {
     /// The pointer to the length of the data to be written.
     len_ptr: *mut u32,
 
-    /// The pointer to the busy flag.
-    ///
-    /// If busy flag is 1, it means that the producer is writing and the consumer
-    /// cannot consume the [`DataBlock`]. Else it means that the consumer can
-    /// reading the [`DataBlock`].
-    busy_ptr: *mut u32,
+    /// The block state; see [`BlockState`].
+    state_ptr: *mut u32,
 
     /// The pointer to the request ID.
     req_id_ptr: *mut u32,
@@ -209,14 +222,14 @@ impl Header {
     unsafe fn from_raw(header_ptr: *mut u8) -> Self {
         let capacity_ptr = header_ptr as *mut u32;
         let len_ptr = unsafe { capacity_ptr.add(1) };
-        let busy_ptr = unsafe { len_ptr.add(1) };
-        let req_id_ptr = unsafe { busy_ptr.add(1) };
+        let state_ptr = unsafe { len_ptr.add(1) };
+        let req_id_ptr = unsafe { state_ptr.add(1) };
         let crc32_ptr = unsafe { req_id_ptr.add(1) };
 
         Self {
             capacity_ptr,
             len_ptr,
-            busy_ptr,
+            state_ptr,
             req_id_ptr,
             crc32_ptr,
         }
@@ -246,22 +259,19 @@ impl Header {
         atomic.store(len, Ordering::Relaxed);
     }
 
-    fn busy(&self) -> bool {
-        let ptr = self.busy_ptr;
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-
-        atomic.load(Ordering::Acquire) == 1
+    fn state(&self) -> BlockState {
+        let atomic = unsafe { AtomicU32::from_ptr(self.state_ptr) };
+        match atomic.load(Ordering::Acquire) {
+            0 => BlockState::Committed,
+            2 => BlockState::Discarded,
+            // Do not consume a block with an unknown state.
+            _ => BlockState::Writing,
+        }
     }
 
-    fn set_busy(&self, busy: bool) {
-        let ptr = self.busy_ptr;
-        let atomic = unsafe { AtomicU32::from_ptr(ptr) };
-
-        if busy {
-            atomic.store(1, Ordering::Release);
-        } else {
-            atomic.store(0, Ordering::Release);
-        }
+    fn set_state(&self, state: BlockState) {
+        let atomic = unsafe { AtomicU32::from_ptr(self.state_ptr) };
+        atomic.store(state as u32, Ordering::Release);
     }
 
     fn advance_len(&self, len: u32) {
@@ -299,6 +309,7 @@ impl Header {
 mod tests {
     use std::sync::Arc;
 
+    use super::BlockState;
     use super::DataBlock;
     use super::HEADER_LEN;
     use super::Header;
@@ -311,16 +322,16 @@ mod tests {
 
         header.set_capacity(1024);
         header.set_written(512);
-        header.set_busy(true);
+        header.set_state(BlockState::Writing);
 
         assert_eq!(header.capacity(), 1024);
         assert_eq!(header.written_len(), 512);
-        assert!(header.busy());
+        assert_eq!(header.state(), BlockState::Writing);
 
         header.advance_len(125);
         assert_eq!(header.capacity(), 1024);
         assert_eq!(header.written_len(), 512 + 125);
-        assert!(header.busy());
+        assert_eq!(header.state(), BlockState::Writing);
     }
 
     #[test]
@@ -353,23 +364,23 @@ mod tests {
 
         assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
         assert_eq!(data_block.written_len(), 0);
-        assert!(data_block.is_busy());
+        assert_eq!(data_block.state(), BlockState::Writing);
         assert_eq!(data_block.req_id(), 1);
 
         let data_block = unsafe { DataBlock::from_raw(data_ptr, Arc::new(())) };
 
         assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
         assert_eq!(data_block.written_len(), 0);
-        assert!(data_block.is_busy());
+        assert_eq!(data_block.state(), BlockState::Writing);
 
         assert_eq!(data_block.capacity(), 1024 - HEADER_LEN as u32);
         assert_eq!(data_block.written_len(), 0);
-        assert!(data_block.is_busy());
+        assert_eq!(data_block.state(), BlockState::Writing);
 
         data_block.header.set_written(10);
         assert_eq!(data_block.written_len(), 10);
 
-        data_block.header.set_busy(false);
-        assert!(!data_block.is_busy());
+        data_block.header.set_state(BlockState::Committed);
+        assert_eq!(data_block.state(), BlockState::Committed);
     }
 }

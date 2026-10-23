@@ -131,32 +131,31 @@ impl RingbufProducer {
 
     /// Reserve a [`PreAlloc`] for committing data.
     ///
-    /// # Errors:
+    /// # Errors
     ///
     /// - If the requested space exceeds the capacity of ringbuf, an
     ///   [`crate::error::Error::ExceedCapacity`] error will be returned.
     ///
-    /// - If the requested space exceeds the remaining space of ringbuf, and
-    ///   not exceeds the capacity, an [`crate::error::Error::NotEnoughSpace`]
-    ///   error will be returned.
+    /// - [`crate::error::Error::NotEnoughSpace`] if insufficient space remains.
+    /// - [`crate::error::Error::ResultFetchNotReady`] if result fetching is enabled
+    ///   but unavailable. The reserved block is discarded automatically.
     pub fn reserve(&self, bytes: usize) -> Result<PreAlloc> {
         let req_id = self.gen_req_id();
         let data_block =
             self.ringbuf.write().unwrap().reserve(bytes, req_id)?;
 
-        let rx = self
+        let mut pre = PreAlloc {
+            data_block,
+            rx: None,
+            enable_checksum: self.enable_checksum,
+            committed: false,
+        };
+
+        pre.rx = self
             .result_fetcher
             .as_ref()
             .map(|fetcher| fetcher.subscribe(req_id))
             .transpose()?;
-
-        let enable_checksum = self.enable_checksum;
-
-        let pre = PreAlloc {
-            data_block,
-            rx,
-            enable_checksum,
-        };
 
         Ok(pre)
     }
@@ -227,4 +226,63 @@ impl SessionHandle {
 
 fn gen_client_id() -> String {
     Uuid::new_v4().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::error::Error;
+    use crate::producer::settings::ProducerSettingsBuilder;
+    use crate::ringbuf::data_block::BlockState;
+
+    #[tokio::test]
+    async fn test_abandoned_allocations() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = ProducerSettingsBuilder::new()
+            .grpc_sock_path(dir.path().join("missing.sock"))
+            .fdpass_sock_path(dir.path().join("missing-fd.sock"))
+            .enable_result_fetch(false)
+            .build();
+        let producer = RingbufProducer::new(settings).await.unwrap();
+
+        drop(producer.reserve(64).unwrap());
+        let mut partial = producer.reserve(64).unwrap();
+        partial.write(b"partial").unwrap();
+        drop(partial);
+        let mut committed = producer.reserve(64).unwrap();
+        committed.write(b"complete").unwrap();
+        drop(committed.commit());
+
+        let ringbuf = producer.ringbuf.read().unwrap();
+        for _ in 0..2 {
+            let block = ringbuf.peek().unwrap();
+            assert_eq!(block.state(), BlockState::Discarded);
+            let len = block.total_len();
+            unsafe { ringbuf.advance_consume_offset(len) };
+        }
+        let block = ringbuf.peek().unwrap();
+        assert_eq!(block.state(), BlockState::Committed);
+        assert_eq!(block.slice().unwrap(), b"complete");
+    }
+
+    #[tokio::test]
+    async fn test_subscription_failure_discards_allocation() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = ProducerSettingsBuilder::new()
+            .grpc_sock_path(dir.path().join("missing.sock"))
+            .fdpass_sock_path(dir.path().join("missing-fd.sock"))
+            .reconnect_interval(Duration::from_secs(60))
+            .build();
+        let producer = RingbufProducer::new(settings).await.unwrap();
+
+        assert!(matches!(
+            producer.reserve(64),
+            Err(Error::ResultFetchNotReady { .. })
+        ));
+        let ringbuf = producer.ringbuf.read().unwrap();
+        let block = ringbuf.peek().unwrap();
+        assert_eq!(block.state(), BlockState::Discarded);
+    }
 }
