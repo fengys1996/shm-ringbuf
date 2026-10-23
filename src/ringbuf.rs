@@ -360,7 +360,7 @@ impl Ringbuf {
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
 
         let _ =
-            atomic.fetch_update(Ordering::Release, Ordering::Acquire, |pre| {
+            atomic.try_update(Ordering::Release, Ordering::Acquire, |pre| {
                 Some((pre + len) % self.data_part_len as u32)
             });
     }
@@ -375,7 +375,7 @@ impl Ringbuf {
         let atomic = unsafe { AtomicU32::from_ptr(ptr) };
 
         let _ =
-            atomic.fetch_update(Ordering::Release, Ordering::Acquire, |pre| {
+            atomic.try_update(Ordering::Release, Ordering::Acquire, |pre| {
                 Some((pre + len) % self.data_part_len as u32)
             });
     }

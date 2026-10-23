@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 env:
-  RUST_TOOLCHAIN: 1.92
+  RUST_TOOLCHAIN: "1.99.1"
 
 jobs:
   typos:
@@ -44,7 +44,7 @@ jobs:
           components: rustfmt, clippy
           
       - name: Check format
-        run: cargo fmt
+        run: cargo fmt --check
 
       - name: Check clippy
         run: cargo clippy --workspace --all-targets -- -D warnings -D clippy::print_stdout -D clippy::print_stderr
